@@ -1,4 +1,5 @@
 <script setup>
+import SearchForm from './components/SearchForm.vue';
 import HelloWorld from './components/HelloWorld.vue'
 import Chart from 'chart.js/auto';
 
@@ -94,6 +95,7 @@ onMounted(() => {
 <template>
   <HelloWorld msg="Aesthetic Cognitivism"/>
 
+  <SearchForm />
     <div class="bg-slate-50 p-5 rounded my-5">
         <p class="text-xl">Expression Timeline</p>
         <canvas id="line"></canvas>
