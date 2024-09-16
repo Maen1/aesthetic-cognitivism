@@ -12,14 +12,14 @@ defineProps({
 </script>
 
 <template>
-  <div class="w-full bg-teal-100 p-2 flex justify-center">
-      <h1 class="text-xl ">{{ msg }}</h1>
+  <div class="w-full bg-fuchsia-300 p-4 flex justify-center rounded my-2">
+      <h1 class="text-xl font-bold ">{{ msg }}</h1>
   </div>
 
-
+<!-- 
   <div class="card">
     <button class="bg-slate-100 rounded-full p-2" @click="store.increment">count is {{ store.doubleCount }}</button>
-  </div>
+  </div> -->
 </template>
 
 <style scoped>
