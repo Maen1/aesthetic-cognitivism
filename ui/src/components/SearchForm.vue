@@ -61,7 +61,11 @@
                  <a class="text-xs text-gray-100 bg-rose-400 py-1 px-2 mr-1 rounded-lg items-center hover:cursor-pointer">
                     beautiful
                     <span  class="bg-rose-500 py-[0.5] px-1 rounded-full ">x</span>
-                  </a>
+                </a>
+                 <a class="text-xs text-gray-100 bg-rose-400 py-1 px-2 mr-1 rounded-lg items-center hover:cursor-pointer">
+                    profound
+                    <span  class="bg-rose-500 py-[0.5] px-1 rounded-full ">x</span>
+                </a>
             </p>
           </div>     
 
