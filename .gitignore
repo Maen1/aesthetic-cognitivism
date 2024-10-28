@@ -22,3 +22,7 @@ ui/dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# cdhu
+
+data
