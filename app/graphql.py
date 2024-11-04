@@ -27,24 +27,39 @@ class Query:
 	
 	@strawberry.field
 	async def word_counts(self, word: str) -> WordCount:
-		result = await 	word_collection.find_one({"Word": word})
+		# Fetch the result from the database
+		result = await word_collection.find_one({"Word": word})
 		print("result", result)
-		if result is None:
-			return None
 		
-		author_counts = [CountByAuthor(author=author["author"], count=author["count"]) for author in result.get("AuthorCounts", [])]
-		year_counts = [CountByYear(year=year["year"], count=year["count"]) for year in result.get("YearCounts", [])]
-		category_counts = [CountByCategory(category=category["category"], count=category["count"]) for category in result.get("CategoryCounts", [])]
+		# Check if the result is None and handle the case
+		if result is None:
+			return None  # Returning None will indicate no result found
+		
+	
+		year_counts = [
+			CountByYear(year=year, count=count) 
+			for year, count in result.get("YearCounts", {}).items()
+			]
+		category_counts = [
+			CountByCategory(category=category, count=count) 
+			for category, count in result.get("CategoryCounts", {}).items()
+			]
+		author_counts = [
+			CountByAuthor(author=author, count=count) 
+			for author, count in result.get("AuthorCounts", {}).items()
+			]
 
+
+		# Create and return the WordCount object
 		return WordCount(
-			_id = result["_id"],
-			Word=result["Word"],
-			TotalCount=result["TotalCount"],
-			AuthorCounts=author_counts,
+			_id=result.get("_id"),  
+			Word=result.get("Word", ""),  
+			TotalCount=result.get("TotalCount", 0), 
 			YearCounts=year_counts,
-			CategoryCounts=category_counts
+			CategoryCounts=category_counts,
+			AuthorCounts=author_counts
 		)
-				
+
 
 
 def map_to_criticism(criticism_instance):
