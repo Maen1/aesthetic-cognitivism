@@ -29,7 +29,6 @@ class Query:
 	async def word_counts(self, word: str) -> WordCount:
 		# Fetch the result from the database
 		result = await word_collection.find_one({"Word": word})
-		print("result", result)
 		
 		# Check if the result is None and handle the case
 		if result is None:

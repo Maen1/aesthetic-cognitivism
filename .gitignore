@@ -22,7 +22,8 @@ ui/dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
+*.pyc
 # cdhu
 
+app/__pycache__/
 data
