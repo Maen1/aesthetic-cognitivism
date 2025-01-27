@@ -12,7 +12,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="w-full bg-fuchsia-700 p-4 flex justify-center rounded">
+  <div class="w-full bg-fuchsia-700 p-4 flex justify-center rounded-xl">
       <h1 class="text-2xl font-bold text-slate-100">{{ msg }}</h1>
   </div>
 

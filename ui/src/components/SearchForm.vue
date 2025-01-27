@@ -20,7 +20,7 @@ const searchExpressions = async () => {
 
 <template>
   <main class="px-4 md:px-0 pt-8">
-    <div class="max-w-8xl mx-auto bg-slate-50 py-8 rounded-lg px-4 md:px-0">
+    <div class="max-w-8xl mx-auto bg-slate-50 py-8 rounded-xl px-4 md:px-0">
       <div class="mx-auto max-w-2xl text-center">
         <h2 class="text-lg font-bold tracking-tight text-gray-900 sm:text-xl">Search for Expressions</h2>
       </div>

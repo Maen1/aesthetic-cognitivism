@@ -116,15 +116,15 @@ onMounted(() => {
   <HelloWorld msg="Aesthetic Cognitivism"/>
 
   <SearchForm />
-    <div class="bg-slate-50 p-5 rounded my-5">
+    <div class="bg-slate-50 p-5 rounded-xl my-5">
         <p class="text-xl">Expression Timeline</p>
         <canvas id="line"></canvas>
     </div>
-    <div class="bg-slate-50 p-5 rounded my-5">
+    <div class="bg-slate-50 p-5 rounded-xl my-5">
         <p class="text-xl">Categories</p>
         <canvas id="bar"></canvas>
     </div>
-    <div class="bg-slate-50 p-5 rounded my-5">
+    <div class="bg-slate-50 p-5 rounded-xl my-5">
         <p class="text-xl">Authors</p>
         <canvas id="pie"></canvas>
     </div>
