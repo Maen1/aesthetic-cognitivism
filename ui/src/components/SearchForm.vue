@@ -1,56 +1,21 @@
 <script setup>
+import { useWordStore } from '../stores/WordStore';
 import { ref } from 'vue';
 
-// GraphQL endpoint
-const GRAPHQL_ENDPOINT = 'http://localhost:8000/graphql/'; // replace with your actual endpoint
+const store = useWordStore()
+
 
 // Search state
 const searchTerm = ref('');
-
+let words = ref('')
 // Define the function to send the search to GraphQL API
+
 const searchExpressions = async () => {
-  if (!searchTerm.value.trim()) return; // Avoid sending empty searches
-  
-  const words =  JSON.stringify(searchTerm.value.split(/\s+/).filter(word => word.trim()));
-  console.log(words)
-
-  const query = `
-        { 
-          wordCounts(words: ${words}) {
-            Word
-            TotalCount
-            CategoryCounts {
-              category 
-              count
-            }
-            AuthorCounts {
-              author 
-              count
-            }
-            YearCounts {
-              year 
-              count
-            }
-        }
-    }
-  `;
-
-
-  try {
-    const response = await fetch(GRAPHQL_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query }),
-    });
-    const result = await response.json();
-
-    console.log(result.data); // Handle the response data
-  } catch (error) {
-    console.error('Error fetching data:', error);
-  }
+  store.setSearchTerm(searchTerm)
+  console.log(store.searchTerm)
+  store.searchExpressions()
 };
+
 </script>
 
 <template>
@@ -73,6 +38,7 @@ const searchExpressions = async () => {
             />
           </div>
         </div>
+        <div>{{ store.getWords.length ? store.getWords : "None" }}</div>
         <div class="mt-8">
           <button
             type="submit"
