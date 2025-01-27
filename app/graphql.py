@@ -26,39 +26,40 @@ class Query:
 		return criticism_collection.count_documents({})
 	
 	@strawberry.field
-	async def word_counts(self, word: str) -> WordCount:
+	async def word_counts(self, words: List[str]) -> List[WordCount]:
 		# Fetch the result from the database
-		result = await word_collection.find_one({"Word": word})
-		
+		cursor = word_collection.find({"Word":{"$in": words}})
+		results = await cursor.to_list(length=None)
+		print(results)
 		# Check if the result is None and handle the case
-		if result is None:
+		if not results:
 			return None  # Returning None will indicate no result found
-		
-	
-		year_counts = [
-			CountByYear(year=year, count=count) 
-			for year, count in result.get("YearCounts", {}).items()
-			]
-		category_counts = [
-			CountByCategory(category=category, count=count) 
-			for category, count in result.get("CategoryCounts", {}).items()
-			]
-		author_counts = [
-			CountByAuthor(author=author, count=count) 
-			for author, count in result.get("AuthorCounts", {}).items()
-			]
+		word_count_list = []
+		for result in results:
+			year_counts = [
+				CountByYear(year=year, count=count) 
+				for year, count in result.get("YearCounts", {}).items()
+				]
+			category_counts = [
+				CountByCategory(category=category, count=count) 
+				for category, count in result.get("CategoryCounts", {}).items()
+				]
+			author_counts = [
+				CountByAuthor(author=author, count=count) 
+				for author, count in result.get("AuthorCounts", {}).items()
+				]
 
 
 		# Create and return the WordCount object
-		return WordCount(
-			_id=result.get("_id"),  
-			Word=result.get("Word", ""),  
-			TotalCount=result.get("TotalCount", 0), 
-			YearCounts=year_counts,
-			CategoryCounts=category_counts,
-			AuthorCounts=author_counts
-		)
-
+			word_count_list.append(WordCount(
+				_id=result.get("_id"),  
+				Word=result.get("Word", ""),  
+				TotalCount=result.get("TotalCount", 0), 
+				YearCounts=year_counts,
+				CategoryCounts=category_counts,
+				AuthorCounts=author_counts
+			))
+		return word_count_list
 
 
 def map_to_criticism(criticism_instance):

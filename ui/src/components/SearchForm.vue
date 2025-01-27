@@ -11,12 +11,26 @@ const searchTerm = ref('');
 const searchExpressions = async () => {
   if (!searchTerm.value.trim()) return; // Avoid sending empty searches
   
-  const word =  JSON.stringify(searchTerm.value);
+  const words =  JSON.stringify(searchTerm.value.split(/\s+/).filter(word => word.trim()));
+  console.log(words)
 
   const query = `
         { 
-          wordCounts(word: ${word}) {
+          wordCounts(words: ${words}) {
+            Word
             TotalCount
+            CategoryCounts {
+              category 
+              count
+            }
+            AuthorCounts {
+              author 
+              count
+            }
+            YearCounts {
+              year 
+              count
+            }
         }
     }
   `;
