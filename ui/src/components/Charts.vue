@@ -135,13 +135,13 @@ watch(() => store.getResults,
     });
 
     // Convert Set to sorted array for labels
-    let labels = Array.from(all_years).sort((a, b) => a - b);
+    let line_labels = Array.from(all_years).sort((a, b) => a - b);
 
     // Create datasets array
-    let datasets = store.getResults.map(result => {
+    let line_datasets = store.getResults.map(result => {
         return {
             label: result.Word,  // Use the word as the label
-            data: labels.map(year => {
+            data: line_labels.map(year => {
                 let entry = result.YearCounts.find(item => item.year === year);
                 return entry ? entry.count : 0; // Fill missing years with 0
             }),
@@ -152,73 +152,52 @@ watch(() => store.getResults,
         };
     });
 
-    console.log("Datasets:", datasets);
-    console.log("Labels:", labels);
+    let all_categories = new Set();
+    // Collect all unique years
+    store.getResults.forEach(result => {
+        result.CategoryCounts.forEach(item => all_categories.add(item.category));
+    });
 
-    for(const res of store.getResults){
-        console.log("from loop", res["Word"])
-      }
-    let ctx1 = document.getElementById("line");
-    let config1 =  {
-          type: 'line',
-          data :{
-            labels,
-            datasets,
-          }
-      };
+    let bar_labels = Array.from(all_categories).sort((a, b) => a - b);
+
+    // Create datasets array
+    let bar_datasets = store.getResults.map(result => {
+        return {
+            label: result.Word,  // Use the word as the label
+            data: bar_labels.map(category => {
+                let entry = result.CategoryCounts.find(item => item.category === category);
+                return entry ? entry.count : 0; // Fill missing years with 0
+            }),
+            borderColor: getRandomColor(),
+            backgroundColor: getRandomColor(0.2),
+            borderWidth: 1
+        };
+    });
+
+    console.log("Bar labels", bar_labels)
+
     function getRandomColor(alpha = 1) {
     const r = Math.floor(Math.random() * 255);
     const g = Math.floor(Math.random() * 255);
     const b = Math.floor(Math.random() * 255);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
+
+    let ctx1 = document.getElementById("line");
+    let config1 =  {
+          type: 'line',
+          data :{
+           labels: line_labels,
+            datasets: line_datasets,
+          }
+      };
       
     let ctx2 = document.getElementById('bar');
     let config2 = {
           type: 'bar',
           data: {
-              labels: ['Poetry', 'Concerts', 'Theater', 'Dance', 'Exhibitions', 'Operas'],
-              datasets: [{
-                  label: 'Beautiful',
-                  data: [12, 19, 20, 5, 8, 3],
-                  backgroundColor: [
-                      'rgba(255, 99, 132, 0.2)',
-                      'rgba(54, 162, 235, 0.2)',
-                      'rgba(255, 206, 86, 0.2)',
-                      'rgba(75, 192, 192, 0.2)',
-                      'rgba(153, 102, 255, 0.2)',
-                      'rgba(255, 159, 64, 0.2)'
-                  ],
-                  borderColor: [
-                      'rgba(255, 99, 132, 1)',
-                      'rgba(54, 162, 235, 1)',
-                      'rgba(255, 206, 86, 1)',
-                      'rgba(75, 192, 192, 1)',
-                      'rgba(153, 102, 255, 1)',
-                      'rgba(255, 159, 64, 1)'
-                  ],
-                  borderWidth: 1
-              },{
-                  label: 'profound',
-                  data: [12, 1, 10, 15, 4, 3],
-                  backgroundColor: [
-                      'rgba(255, 99, 132, 0.2)',
-                      'rgba(54, 162, 235, 0.2)',
-                      'rgba(255, 206, 86, 0.2)',
-                      'rgba(75, 192, 192, 0.2)',
-                      'rgba(153, 102, 255, 0.2)',
-                      'rgba(255, 159, 64, 0.2)'
-                  ],
-                  borderColor: [
-                      'rgba(255, 99, 132, 1)',
-                      'rgba(54, 162, 235, 1)',
-                      'rgba(255, 206, 86, 1)',
-                      'rgba(75, 192, 192, 1)',
-                      'rgba(153, 102, 255, 1)',
-                      'rgba(255, 159, 64, 1)'
-                  ],
-                  borderWidth: 1
-              }]
+              labels: bar_labels,
+              datasets: bar_datasets
           },
           options: {
               scales: {
