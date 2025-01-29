@@ -174,7 +174,28 @@ watch(() => store.getResults,
         };
     });
 
-    console.log("Bar labels", bar_labels)
+     let all_authors = new Set();
+    // Collect all unique years
+    store.getResults.forEach(result => {
+        result.AuthorCounts.forEach(item => all_authors.add(item.author));
+    });
+
+    let donut_labels = Array.from(all_authors).sort((a, b) => a - b);
+
+    // Create datasets array
+    let donut_datasets = store.getResults.map(result => {
+        return {
+            label: result.Word,  // Use the word as the label
+            data: donut_labels.map(author => {
+                let entry = result.AuthorCounts.find(item => item.author === author);
+                return entry ? entry.count : 0; // Fill missing years with 0
+            }),
+            borderColor: getRandomColor(),
+            backgroundColor: getRandomColor(0.2),
+            hoverOffset: 4
+        };
+    });
+
 
     function getRandomColor(alpha = 1) {
     const r = Math.floor(Math.random() * 255);
@@ -211,21 +232,8 @@ watch(() => store.getResults,
     let config3 = {
           type: 'doughnut',
           data: {
-              labels: [
-                  'Mozart',
-                  'Beethoven',
-                  'Bach'
-              ],
-              datasets: [{
-                  label: 'Dataset',
-                  data: [30, 5, 10],
-                  backgroundColor: [
-                  'rgb(255, 99, 132)',
-                  'rgb(54, 162, 235)',
-                  'rgb(255, 205, 86)'
-                  ],
-                  hoverOffset: 4
-              }]
+            labels: donut_labels,
+            datasets: donut_datasets
           }
       };  
 
