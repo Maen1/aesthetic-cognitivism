@@ -138,7 +138,7 @@ watch(() => store.getResults,
     let line_labels = Array.from(all_years).sort((a, b) => a - b);
 
     // Create datasets array
-    let line_datasets = store.getResults.map(result => {
+    let line_datasets = store.getResults.map((result, index) => {
         return {
             label: result.Word,  // Use the word as the label
             data: line_labels.map(year => {
@@ -146,8 +146,8 @@ watch(() => store.getResults,
                 return entry ? entry.count : 0; // Fill missing years with 0
             }),
             fill: false,
-            borderColor: getRandomColor(),
-            backgroundColor: getRandomColor(0.2),
+            borderColor: getRandomColor(index),
+            backgroundColor: getRandomColor(index, 0.2),
             tension: 0.1
         };
     });
@@ -161,15 +161,15 @@ watch(() => store.getResults,
     let bar_labels = Array.from(all_categories).sort((a, b) => a - b);
 
     // Create datasets array
-    let bar_datasets = store.getResults.map(result => {
+    let bar_datasets = store.getResults.map((result, index) => {
         return {
             label: result.Word,  // Use the word as the label
             data: bar_labels.map(category => {
                 let entry = result.CategoryCounts.find(item => item.category === category);
                 return entry ? entry.count : 0; // Fill missing years with 0
             }),
-            borderColor: getRandomColor(),
-            backgroundColor: getRandomColor(0.2),
+            borderColor: getRandomColor(index),
+            backgroundColor: getRandomColor(index,0.2),
             borderWidth: 1
         };
     });
@@ -183,24 +183,28 @@ watch(() => store.getResults,
     let donut_labels = Array.from(all_authors).sort((a, b) => a - b);
 
     // Create datasets array
-    let donut_datasets = store.getResults.map(result => {
+    let donut_datasets = store.getResults.map((result, index) => {
         return {
             label: result.Word,  // Use the word as the label
             data: donut_labels.map(author => {
                 let entry = result.AuthorCounts.find(item => item.author === author);
                 return entry ? entry.count : 0; // Fill missing years with 0
             }),
-            borderColor: getRandomColor(),
-            backgroundColor: getRandomColor(0.2),
+            borderColor: getRandomColor(index),
+            backgroundColor: getRandomColor(index, 0.2),
             hoverOffset: 4
         };
     });
 
+    function seededRandom(seed) {
+        let x = Math.sin(seed) * 10000; 
+        return x - Math.floor(x);
+     }
 
-    function getRandomColor(alpha = 1) {
-    const r = Math.floor(Math.random() * 255);
-    const g = Math.floor(Math.random() * 255);
-    const b = Math.floor(Math.random() * 255);
+    function getRandomColor(seed, alpha = 1) {
+    const r = Math.floor(seededRandom(seed) * 255);
+    const g = Math.floor(seededRandom(seed + 1) * 255);
+    const b = Math.floor(seededRandom(seed + 2)  * 255);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
