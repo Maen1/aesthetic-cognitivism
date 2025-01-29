@@ -54,6 +54,7 @@ class Query:
 			word_count_list.append(WordCount(
 				_id=result.get("_id"),  
 				Word=result.get("Word", ""),  
+				WordConcept=result.get("WordConcept", ""),  
 				TotalCount=result.get("TotalCount", 0), 
 				YearCounts=year_counts,
 				CategoryCounts=category_counts,

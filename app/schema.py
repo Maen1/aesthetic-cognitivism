@@ -37,6 +37,7 @@ class WordCount:
 	_id: str
 	Word: str
 	TotalCount: int
+	WordConcept:list[str]
 	AuthorCounts: list[CountByAuthor]
 	YearCounts: list[CountByYear]
 	CategoryCounts: list[CountByCategory]
