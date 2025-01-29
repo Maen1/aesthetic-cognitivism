@@ -1,11 +1,15 @@
 <script setup>
 import { useWordStore } from '../stores/WordStore';
-import { ref, watch  ,onMounted } from 'vue';
+import { ref, watch  ,onMounted, computed } from 'vue';
 import Chart from 'chart.js/auto';
 
 const store = useWordStore()
 
 let chart1, chart2, chart3
+
+
+const results = computed(() => store.getResults)
+
 
 
 onMounted(() => {
@@ -120,36 +124,54 @@ let config3 = {
 
 
 
-watch(() => store.getWords,
+watch(() => store.getResults,
     ()=> {
     console.log("length", store.getWordsLength)
-    console.log("words", store.getWords)
+    console.log("words", store.getResults[0]["YearCounts"]["year"])
+    let all_years = new Set();
+    // Collect all unique years
+    store.getResults.forEach(result => {
+        result.YearCounts.forEach(item => all_years.add(item.year));
+    });
 
+    // Convert Set to sorted array for labels
+    let labels = Array.from(all_years).sort((a, b) => a - b);
 
+    // Create datasets array
+    let datasets = store.getResults.map(result => {
+        return {
+            label: result.Word,  // Use the word as the label
+            data: labels.map(year => {
+                let entry = result.YearCounts.find(item => item.year === year);
+                return entry ? entry.count : 0; // Fill missing years with 0
+            }),
+            fill: false,
+            borderColor: getRandomColor(),
+            backgroundColor: getRandomColor(0.2),
+            tension: 0.1
+        };
+    });
+
+    console.log("Datasets:", datasets);
+    console.log("Labels:", labels);
+
+    for(const res of store.getResults){
+        console.log("from loop", res["Word"])
+      }
     let ctx1 = document.getElementById("line");
     let config1 =  {
           type: 'line',
           data :{
-              labels:  [1980, 1981, 1982, 1983, 1990, 1991, 1995],
-              datasets: [{
-                  label: 'beautiful',
-                  data: [65, 59, 80, 81, 56, 55, 40],
-                  fill: false,
-                  borderColor: 'rgb(75, 192, 192)',
-                  backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                  tension: 0.1
-              },
-              {
-                  label: 'profound',
-                  data: [6, 59, 70, 31, 36, 55, 0],
-                  fill: false,
-                  borderColor: 'rgb(192, 75, 192)',
-                  backgroundColor: 'rgba(192, 75, 192, 0.2)',
-                  tension: 0.1
-              }]
+            labels,
+            datasets,
           }
       };
-
+    function getRandomColor(alpha = 1) {
+    const r = Math.floor(Math.random() * 255);
+    const g = Math.floor(Math.random() * 255);
+    const b = Math.floor(Math.random() * 255);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
       
     let ctx2 = document.getElementById('bar');
     let config2 = {
