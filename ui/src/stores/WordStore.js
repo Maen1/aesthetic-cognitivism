@@ -5,12 +5,16 @@ export const useWordStore = defineStore('Word', {
 	count: 0, 
 	name: 'Eduardo',
 	searchTerm: '',
-	words:[]
+	words:[],
+	results:[]	
+
 	}),
 
   getters: {
 	doubleCount: (state) => state.count * 2,
-	getWords: (state) => state.words
+	getWords: (state) => state.words,
+	getWordsLength: (state) => state.words.length,
+	getResults: (state) => state.results
   },
   actions: {
 	increment() {
@@ -26,12 +30,17 @@ export const useWordStore = defineStore('Word', {
 		this.searchTerm = searchTerm
 	},
 
+	setResults(results){
+		this.results = results
+	},
+
 	async searchExpressions() {
 		if (!this.searchTerm.trim()) return; // Avoid sending empty searches
 		
 		const words =  JSON.stringify(this.searchTerm.split(/\s+/).filter(word => word.trim()));
-		this.searchWords(words)
-		console.log(words)
+		this.searchWords(JSON.parse(words))
+		console.log("words to query",JSON.parse(words))
+
 
 		const query = `
 				{ 
@@ -65,8 +74,9 @@ export const useWordStore = defineStore('Word', {
 			body: JSON.stringify({ query }),
 			});
 			const result = await response.json();
+			this.setResults(result.data["wordCounts"])
 
-			console.log(result.data); // Handle the response data
+			console.log("results: ", result.data["wordCounts"]); // Handle the response data
 		} catch (error) {
 			console.error('Error fetching data:', error);
 		}

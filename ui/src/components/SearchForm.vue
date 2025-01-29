@@ -7,7 +7,6 @@ const store = useWordStore()
 
 // Search state
 const searchTerm = ref('');
-let words = ref('')
 // Define the function to send the search to GraphQL API
 
 const searchExpressions = async () => {
@@ -38,7 +37,12 @@ const searchExpressions = async () => {
             />
           </div>
         </div>
-        <div>{{ store.getWords.length ? store.getWords : "None" }}</div>
+        <div v-if="store.getResults.length">
+            <p v-for="res in store.results">
+                {{ res["Word"] }} : {{ res["TotalCount"] }}
+                <!-- {{ store.getResults.length ? store.results[0]["Word"]  : "None" }} -->
+            </p>
+        </div>
         <div class="mt-8">
           <button
             type="submit"
