@@ -28,3 +28,4 @@ doc = nlp(text)
 names = [ent.text for ent in doc.ents if ent.label_ == "PERSON"]
 
 print("Spacy found:", names)
+print("spacy is way faster and better than ner")
