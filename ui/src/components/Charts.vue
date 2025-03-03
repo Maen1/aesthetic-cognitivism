@@ -1,7 +1,7 @@
 <script setup>
 import { useWordStore } from '../stores/WordStore';
 import { ref, watch  ,onMounted, computed } from 'vue';
-import Chart from 'chart.js/auto';
+import Chart, { scales } from 'chart.js/auto';
 
 const store = useWordStore()
 
@@ -152,6 +152,10 @@ watch(() => store.getResults,
         };
     });
 
+    let maxValue = [...line_datasets.flatMap(dataset => dataset.data)].sort((a,b) => b -a)[1];
+
+    console.log("Max value", maxValue)
+    console.log(...line_datasets.flatMap(dataset => dataset.data))
     let all_categories = new Set();
     // Collect all unique years
     store.getResults.forEach(result => {
@@ -214,6 +218,14 @@ watch(() => store.getResults,
           data :{
            labels: line_labels,
             datasets: line_datasets,
+          },
+          options:{
+            scales:{
+                y: {
+                    max: maxValue + 10
+                }    
+            },
+            responsive: true,
           }
       };
       
