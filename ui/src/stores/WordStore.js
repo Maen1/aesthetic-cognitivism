@@ -65,7 +65,7 @@ export const useWordStore = defineStore('Word', {
 
 
 		try {
-			const GRAPHQL_ENDPOINT = 'http://localhost:8000/graphql/'; // replace with your actual endpoint
+			const GRAPHQL_ENDPOINT = 'http://localhost/api/graphql/'; // replace with your actual endpoint
 			const response = await fetch(GRAPHQL_ENDPOINT, {
 			method: 'POST',
 			headers: {

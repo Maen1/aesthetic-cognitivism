@@ -11,6 +11,8 @@ origins = [
 	"http://localhost.tiangolo.com",
 	"https://localhost.tiangolo.com",
 	"http://localhost",
+	"http://localhost/api/graphql",
+	"http://localhost/graphql",
 	"http://localhost:5173",
 	"http://localhost:8000",
 	"http://localhost:8000/graphql/"
@@ -25,7 +27,7 @@ app.add_middleware(
 )
 
 schema = strawberry.Schema(query=Query)
-app.mount("/graphql", GraphQL(schema, debug=True))
+app.mount("/api/graphql", GraphQL(schema, debug=True))
 
 @app.get("/")
 def home():
