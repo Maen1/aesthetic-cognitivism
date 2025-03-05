@@ -17,12 +17,22 @@ services:
     build: 
       context: ./backend
     container_name: aestheticbackend
+    depends_on:
+      - mongodb
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`localhost`) && PathPrefix(`/api`)"  # Use localhost or IP
       - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
-  
+
+  mongodb:
+    image: mongo:8
+    restart: always
+    container_name: aestheticdb
+    volumes:
+      - mongodb_data:/data/db 
+
+
 
   traefik:
     image: traefik:latest
@@ -39,3 +49,7 @@ services:
       - "traefik.http.routers.traefik.rule=Host(`localhost`)"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.entrypoints=dashboard"
+
+
+volumes:
+  mongodb_data:
