@@ -4,6 +4,8 @@ api:
 entryPoints:
   web:
     address: ":80"  # HTTP only
+  dashboard:
+    address: ":8080"  # HTTP only
 
 providers:
   docker:
