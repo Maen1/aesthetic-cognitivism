@@ -15,5 +15,5 @@ jobs:
       - run: echo "🖥️ The workflow is now ready to test your code on the runner."
       - name: Set up Docker Compose 🎼
         run: |
-          docker-compose down
-          docker-compose up -d --build
+          docker compose down
+          docker compose up -d --build
