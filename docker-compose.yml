@@ -50,6 +50,5 @@ services:
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.entrypoints=dashboard"
 
-
 volumes:
   mongodb_data:
