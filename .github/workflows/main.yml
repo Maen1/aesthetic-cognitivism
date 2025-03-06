@@ -18,5 +18,5 @@ jobs:
           ls ${{ github.workspace }}
       - run: echo "🍏 This job's status is ${{ job.status }}."
       - name: check docker 
-      - run: |
+        run: |
           docker compose ps
