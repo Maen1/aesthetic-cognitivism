@@ -9,7 +9,7 @@ services:
       - backend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`localhost`) && PathPrefix(`/`)"  # Use localhost or IP
+      - "traefik.http.routers.frontend.rule=Host(`130.238.146.150`) && PathPrefix(`/`)"  # Use 130.238.146.150 or IP
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
   
@@ -21,7 +21,7 @@ services:
       - mongodb
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=Host(`localhost`) && PathPrefix(`/api`)"  # Use localhost or IP
+      - "traefik.http.routers.backend.rule=Host(`130.238.146.150`) && PathPrefix(`/api`)"  # Use 130.238.146.150 or IP
       - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
 
@@ -46,7 +46,7 @@ services:
     labels:
       - "traefik.enable=true"
       # - "traefik.http.routers.traefik.rule=Host(`traefik.yourdomain.com`)"
-      - "traefik.http.routers.traefik.rule=Host(`localhost`)"
+      - "traefik.http.routers.traefik.rule=Host(`130.238.146.150`)"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.entrypoints=dashboard"
 
