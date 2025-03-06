@@ -7,4 +7,3 @@ client = AsyncIOMotorClient(MONGO_URL)
 database = client["aesthetic"]
 criticism_collection = database["criticism"]
 word_collection = database["word_counts"]
-
