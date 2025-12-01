@@ -1,5 +1,5 @@
 from .database import criticism_collection, word_collection
-from .schema import Criticism, WordCount, CountByAuthor, CountByCategory, CountByYear
+from .schema import Criticism, WordCount, CountByArtist, CountByCategory, CountByYear, CountByConcept
 from typing import List, Optional
 from bson import ObjectId
 import strawberry
@@ -44,9 +44,14 @@ class Query:
 				CountByCategory(category=category, count=count) 
 				for category, count in result.get("CategoryCounts", {}).items()
 				]
-			author_counts = [
-				CountByAuthor(author=author, count=count) 
-				for author, count in result.get("AuthorCounts", {}).items()
+			artist_counts = [
+				CountByArtist(artist=artist, count=count) 
+				for artist, count in result.get("ArtistCounts", {}).items()
+				]
+			
+			concept_counts = [
+				CountByConcept(concept=concept, count=count) 
+				for concept, count in result.get("ConceptCounts", {}).items()
 				]
 
 
@@ -58,7 +63,8 @@ class Query:
 				TotalCount=result.get("TotalCount", 0), 
 				YearCounts=year_counts,
 				CategoryCounts=category_counts,
-				AuthorCounts=author_counts
+				ArtistCounts=artist_counts,
+				ConceptCounts=concept_counts
 			))
 		return word_count_list
 

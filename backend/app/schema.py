@@ -18,8 +18,8 @@ class Criticism:
 
 
 @strawberry.type
-class CountByAuthor:
-	author: Optional[str]
+class CountByArtist:
+	artist: Optional[str]
 	count: int
 
 @strawberry.type
@@ -33,11 +33,17 @@ class CountByCategory:
 	count: int
 
 @strawberry.type
+class CountByConcept:
+	concept:Optional[str]
+	count: int
+
+@strawberry.type
 class WordCount:
 	_id: str
 	Word: str
 	TotalCount: int
 	WordConcept:list[str]
-	AuthorCounts: list[CountByAuthor]
+	ArtistCounts: list[CountByArtist]
+	ConceptCounts: list[CountByConcept]
 	YearCounts: list[CountByYear]
 	CategoryCounts: list[CountByCategory]
