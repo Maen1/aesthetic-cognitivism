@@ -516,10 +516,13 @@
 		<canvas id="bar-category"></canvas>
 	</div>
 
+	<!---
 	<div class="bg-slate-50 p-5 rounded-xl my-5">
 		<p class="text-xl">Concepts Categories</p>
 		<canvas id="bar-concept"></canvas>
 	</div>
+
+	-->
 
 	<div class="bg-slate-50 p-5 rounded-xl my-5">
 		<p class="text-xl">Sentiment Analysis</p>
