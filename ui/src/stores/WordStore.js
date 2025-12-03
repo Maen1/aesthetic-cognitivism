@@ -59,6 +59,10 @@ export const useWordStore = defineStore('Word', {
 					concept 
 					count
 					}
+					SentimentCounts {
+					sentiment 
+					count
+					}
 					YearCounts {
 					year 
 					count
@@ -79,7 +83,6 @@ export const useWordStore = defineStore('Word', {
 				});
 				const result = await response.json();
 				this.setResults(result.data['wordCounts']);
-
 			} catch (error) {
 				console.error('Error fetching data:', error);
 			}

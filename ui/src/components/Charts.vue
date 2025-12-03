@@ -5,7 +5,7 @@
 
 	const store = useWordStore();
 
-	let chart1, chart2, chart3, chart4;
+	let chart1, chart2, chart3, chart4, chart5;
 
 	const results = computed(() => store.getResults);
 
@@ -178,6 +178,59 @@
 			},
 		};
 
+		let ctx5 = document.getElementById('bar-sentiment');
+		let config5 = {
+			type: 'bar',
+			data: {
+				labels: ['Positive', 'Negative', 'Neutral'],
+				datasets: [
+					{
+						label: 'Beautiful',
+						data: [12, 1, 20],
+						backgroundColor: [
+							'rgba(255, 99, 132, 0.2)',
+							'rgba(54, 162, 235, 0.2)',
+							'rgba(255, 206, 86, 0.2)',
+							'rgba(75, 192, 192, 0.2)',
+							'rgba(153, 102, 255, 0.2)',
+							'rgba(255, 159, 64, 0.2)',
+						],
+						borderColor: [
+							'rgba(255, 99, 132, 1)',
+							'rgba(54, 162, 235, 1)',
+							'rgba(255, 206, 86, 1)',
+							'rgba(75, 192, 192, 1)',
+							'rgba(153, 102, 255, 1)',
+							'rgba(255, 159, 64, 1)',
+						],
+						borderWidth: 1,
+					},
+					{
+						label: 'profound',
+						data: [12, 1, 3],
+						backgroundColor: [
+							'rgba(255, 99, 132, 0.2)',
+							'rgba(54, 162, 235, 0.2)',
+							'rgba(255, 206, 86, 0.2)',
+						],
+						borderColor: [
+							'rgba(255, 99, 132, 1)',
+							'rgba(54, 162, 235, 1)',
+							'rgba(255, 206, 86, 1)',
+						],
+						borderWidth: 1,
+					},
+				],
+			},
+			options: {
+				scales: {
+					y: {
+						beginAtZero: true,
+					},
+				},
+			},
+		};
+
 		let ctx3 = document.getElementById('pie');
 		let config3 = {
 			type: 'doughnut',
@@ -202,6 +255,7 @@
 		chart2 = new Chart(ctx2, config2);
 		chart3 = new Chart(ctx3, config3);
 		chart4 = new Chart(ctx4, config4);
+		chart5 = new Chart(ctx5, config5);
 	});
 
 	watch(
@@ -275,6 +329,31 @@
 					data: concept_labels.map((concept) => {
 						let entry = result.ConceptCounts.find(
 							(item) => item.concept === concept
+						);
+						return entry ? entry.count : 0; // Fill missing years with 0
+					}),
+					borderColor: getRandomColor(index),
+					backgroundColor: getRandomColor(index, 0.2),
+					borderWidth: 1,
+				};
+			});
+
+			//Sentiment
+			let all_sentiments = new Set();
+			store.getResults.forEach((result) => {
+				result.SentimentCounts.forEach((item) =>
+					all_sentiments.add(item.sentiment)
+				);
+			});
+
+			let sentiment_labels = Array.from(all_sentiments).sort((a, b) => a - b);
+			// Create datasets array
+			let sentiment_datasets = store.getResults.map((result, index) => {
+				return {
+					label: result.Word, // Use the word as the label
+					data: sentiment_labels.map((sentiment) => {
+						let entry = result.SentimentCounts.find(
+							(item) => item.sentiment === sentiment
 						);
 						return entry ? entry.count : 0; // Fill missing years with 0
 					}),
@@ -369,6 +448,22 @@
 					},
 				},
 			};
+
+			let ctx5 = document.getElementById('bar-sentiment');
+			let config5 = {
+				type: 'bar',
+				data: {
+					labels: sentiment_labels,
+					datasets: sentiment_datasets,
+				},
+				options: {
+					scales: {
+						y: {
+							beginAtZero: true,
+						},
+					},
+				},
+			};
 			let ctx3 = document.getElementById('pie');
 			let config3 = {
 				type: 'doughnut',
@@ -383,16 +478,19 @@
 				chart2.destroy();
 				chart3.destroy();
 				chart4.destroy();
+				chart5.destroy();
 
 				chart1 = new Chart(ctx1, config1);
 				chart2 = new Chart(ctx2, config2);
 				chart3 = new Chart(ctx3, config3);
 				chart4 = new Chart(ctx4, config4);
+				chart5 = new Chart(ctx5, config5);
 			} else {
 				chart1 = new Chart(ctx1, config1);
 				chart2 = new Chart(ctx2, config2);
 				chart3 = new Chart(ctx3, config3);
 				chart4 = new Chart(ctx4, config4);
+				chart5 = new Chart(ctx5, config5);
 			}
 		}
 	);
@@ -414,13 +512,18 @@
 		<canvas id="line"></canvas>
 	</div>
 	<div class="bg-slate-50 p-5 rounded-xl my-5">
-		<p class="text-xl">Categories</p>
+		<p class="text-xl">Artistic Categories</p>
 		<canvas id="bar-category"></canvas>
 	</div>
 
 	<div class="bg-slate-50 p-5 rounded-xl my-5">
-		<p class="text-xl">Concepts</p>
+		<p class="text-xl">Concepts Categories</p>
 		<canvas id="bar-concept"></canvas>
+	</div>
+
+	<div class="bg-slate-50 p-5 rounded-xl my-5">
+		<p class="text-xl">Sentiment Analysis</p>
+		<canvas id="bar-sentiment"></canvas>
 	</div>
 	<div class="bg-slate-50 p-5 rounded-xl my-5">
 		<p class="text-xl">Artist</p>

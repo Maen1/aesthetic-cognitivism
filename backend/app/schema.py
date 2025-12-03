@@ -20,22 +20,26 @@ class Criticism:
 @strawberry.type
 class CountByArtist:
 	artist: Optional[str]
-	count: int
+	count: float
 
 @strawberry.type
 class CountByYear:
 	year: Optional[int]
-	count: int
+	count: float
 
 @strawberry.type
 class CountByCategory:
 	category:Optional[str]
-	count: int
+	count: float
 
 @strawberry.type
 class CountByConcept:
 	concept:Optional[str]
-	count: int
+	count: float
+@strawberry.type
+class CountBySentiment:
+	sentiment:Optional[str]
+	count: float
 
 @strawberry.type
 class WordCount:
@@ -47,3 +51,4 @@ class WordCount:
 	ConceptCounts: list[CountByConcept]
 	YearCounts: list[CountByYear]
 	CategoryCounts: list[CountByCategory]
+	SentimentCounts: list[CountBySentiment]
