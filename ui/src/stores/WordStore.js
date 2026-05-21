@@ -76,8 +76,8 @@ export const useWordStore = defineStore('Word', {
 		`;
 
 			try {
-				//const GRAPHQL_ENDPOINT = 'http://130.238.146.150/api/graphql/'; // prod
-				const GRAPHQL_ENDPOINT = 'http://localhost:8000/api/graphql/'; // dev
+				const GRAPHQL_ENDPOINT = 'http://130.238.146.150/api/graphql/'; // prod
+				//const GRAPHQL_ENDPOINT = 'http://localhost:8000/api/graphql/'; // dev
 				const response = await fetch(GRAPHQL_ENDPOINT, {
 					method: 'POST',
 					headers: {
