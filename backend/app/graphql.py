@@ -1,5 +1,5 @@
 from .database import criticism_collection, word_collection
-from .schema import Criticism, WordCount, CountByArtist, CountByCategory, CountByYear, CountByConcept, CountBySentiment
+from .schema import Criticism, WordCount, CountByArtist, CountByCategory, CountByYear, CountByConcept, CountBySentiment, SnippetsByArtist
 from typing import List, Optional
 from bson import ObjectId
 import strawberry
@@ -31,9 +31,8 @@ class Query:
 		cursor = word_collection.find({"Word":{"$in": words}})
 		results = await cursor.to_list(length=None)
 		print(results)
-		# Check if the result is None and handle the case
 		if not results:
-			return None  # Returning None will indicate no result found
+			return []
 		word_count_list = []
 		for result in results:
 			year_counts = [
@@ -47,6 +46,10 @@ class Query:
 			artist_counts = [
 				CountByArtist(artist=artist, count=count) 
 				for artist, count in result.get("ArtistCounts", {}).items()
+				]
+			artist_snippets = [
+				SnippetsByArtist(artist=artist, snippets=snippets)
+				for artist, snippets in result.get("ArtistSnippets", {}).items()
 				]
 			
 			concept_counts = [
@@ -68,6 +71,7 @@ class Query:
 				YearCounts=year_counts,
 				CategoryCounts=category_counts,
 				ArtistCounts=artist_counts,
+				ArtistSnippets=artist_snippets,
 				ConceptCounts=concept_counts,
 				SentimentCounts=sentiment_counts
 			))

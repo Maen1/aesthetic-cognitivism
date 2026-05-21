@@ -42,12 +42,18 @@ class CountBySentiment:
 	count: float
 
 @strawberry.type
+class SnippetsByArtist:
+	artist: Optional[str]
+	snippets: list[str]
+
+@strawberry.type
 class WordCount:
 	_id: str
 	Word: str
 	TotalCount: int
 	WordConcept:list[str]
 	ArtistCounts: list[CountByArtist]
+	ArtistSnippets: list[SnippetsByArtist]
 	ConceptCounts: list[CountByConcept]
 	YearCounts: list[CountByYear]
 	CategoryCounts: list[CountByCategory]

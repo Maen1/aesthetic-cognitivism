@@ -8,6 +8,35 @@
 	let chart1, chart2, chart3, chart4, chart5;
 
 	const results = computed(() => store.getResults);
+	const hoveredArtist = ref('');
+	const hoveredWord = ref('');
+	const hoveredCount = ref('');
+	const selectedArtist = ref('');
+	const selectedWord = ref('');
+	const selectedCount = ref('');
+	const selectedSnippets = ref([]);
+
+	const escapeHtml = (value) =>
+		String(value)
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+
+	const escapeRegExp = (value) =>
+		String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+	const highlightWord = (text, word) => {
+		const safe = escapeHtml(text);
+		if (!word) return safe;
+		const regex = new RegExp(escapeRegExp(word), 'gi');
+		return safe.replace(
+			regex,
+			(match) =>
+				`<mark style="background:#fde68a;padding:0 2px;border-radius:2px;">${match}</mark>`
+		);
+	};
 
 	onMounted(() => {
 		let ctx1 = document.getElementById('line');
@@ -387,6 +416,25 @@
 				};
 			});
 
+			const artistSnippetMap = {};
+			store.getResults.forEach((result) => {
+				const byArtist = {};
+				(result.ArtistSnippets || []).forEach((entry) => {
+					byArtist[entry.artist] = entry.snippets || [];
+				});
+				artistSnippetMap[result.Word] = byArtist;
+			});
+
+			const getSliceInfo = (chart, element) => {
+				if (!element) return null;
+				const dataset = chart.data.datasets[element.datasetIndex];
+				const word = dataset?.label || '';
+				const artist = chart.data.labels?.[element.index] || '';
+				const count = dataset?.data?.[element.index] ?? '';
+				const snippets = artistSnippetMap[word]?.[artist] || [];
+				return { artist, word, count, snippets };
+			};
+
 			function seededRandom(seed) {
 				let x = Math.sin(seed) * 10000;
 				return x - Math.floor(x);
@@ -471,6 +519,37 @@
 					labels: donut_labels,
 					datasets: donut_datasets,
 				},
+				options: {
+					onHover: (_event, elements, chart) => {
+						if (!elements?.length) {
+							hoveredArtist.value = '';
+							hoveredWord.value = '';
+							hoveredCount.value = '';
+							return;
+						}
+						const info = getSliceInfo(chart, elements[0]);
+						if (!info) return;
+						hoveredArtist.value = info.artist;
+						hoveredWord.value = info.word;
+						hoveredCount.value = info.count;
+					},
+					onClick: (_event, elements, chart) => {
+						if (!elements?.length) {
+							return;
+						}
+						const info = getSliceInfo(chart, elements[0]);
+						if (!info) return;
+						selectedArtist.value = info.artist;
+						selectedWord.value = info.word;
+						selectedCount.value = info.count;
+						selectedSnippets.value = info.snippets;
+					},
+					plugins: {
+						tooltip: {
+							enabled: false,
+						},
+					},
+				},
 			};
 
 			if (chart1) {
@@ -528,8 +607,45 @@
 		<p class="text-xl">Sentiment Analysis</p>
 		<canvas id="bar-sentiment"></canvas>
 	</div>
-	<div class="bg-slate-50 p-5 rounded-xl my-5">
+	<div class="bg-slate-50 p-5 rounded-xl my-5 relative">
 		<p class="text-xl">Artist</p>
 		<canvas id="pie"></canvas>
+		<div class="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+			<div v-if="hoveredWord">
+				<p class="text-base font-semibold text-slate-900">
+					{{ hoveredArtist }}
+				</p>
+				<p class="text-sm text-slate-600">
+					Word:
+					<span class="font-semibold text-slate-800">{{ hoveredWord }}</span>
+					({{ hoveredCount }})
+				</p>
+			</div>
+			<p v-else class="text-sm text-slate-500">
+				Hover a slice to see artist, word, and count.
+			</p>
+
+			<div class="mt-3">
+				<p v-if="selectedWord" class="text-sm font-semibold text-slate-700">
+					Snippets for {{ selectedArtist }} · {{ selectedWord }} ({{
+						selectedCount
+					}})
+				</p>
+				<p v-else class="text-sm text-slate-500">
+					Click a slice to view snippets.
+				</p>
+				<div
+					v-if="selectedWord"
+					class="mt-2 max-h-64 overflow-y-auto space-y-2 pr-2"
+				>
+					<p
+						v-for="(snippet, index) in selectedSnippets"
+						:key="`${selectedArtist}-${index}`"
+						class="text-sm text-slate-700 leading-6"
+						v-html="highlightWord(snippet, selectedWord)"
+					></p>
+				</div>
+			</div>
+		</div>
 	</div>
 </template>

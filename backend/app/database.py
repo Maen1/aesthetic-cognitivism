@@ -1,8 +1,8 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 
-# MONGO_URL = "mongodb://localhost:27017"
+MONGO_URL = "mongodb://localhost:27017"
 # MONGO_URL = "mongodb://host.docker.internal:27017"
-MONGO_URL = "mongodb://mongodb:27017"
+#MONGO_URL = "mongodb://mongodb:27017"
 client = AsyncIOMotorClient(MONGO_URL)
 database = client["aestheticv3"]
 criticism_collection = database["criticism"]

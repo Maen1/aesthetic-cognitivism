@@ -38,9 +38,8 @@ const searchExpressions = async () => {
           </div>
         </div>
         <div v-if="store.getResults.length">
-            <p v-for="res in store.getResults">
-                {{ res["Word"] }} : {{ res["TotalCount"] }}
-                <!-- {{ store.getResults.length ? store.results[0]["Word"]  : "None" }} -->
+            <p v-for="res in store.getResults" :key="res.Word" class="text-sm font-semibold text-gray-900">
+              {{ res["Word"] }} : {{ res["TotalCount"] }}
             </p>
         </div>
         <div class="mt-8">
