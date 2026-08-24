@@ -1,651 +1,546 @@
 <script setup>
-	import { useWordStore } from '../stores/WordStore';
-	import { ref, watch, onMounted, computed } from 'vue';
-	import Chart, { scales } from 'chart.js/auto';
+import { useWordStore } from '../stores/WordStore';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
+import Chart from 'chart.js/auto';
 
-	const store = useWordStore();
+const store = useWordStore();
 
-	let chart1, chart2, chart3, chart4, chart5;
+let chart1 = null;
+let chart2 = null;
+let chart3 = null;
+let chart5 = null;
 
-	const results = computed(() => store.getResults);
-	const hoveredArtist = ref('');
-	const hoveredWord = ref('');
-	const hoveredCount = ref('');
-	const selectedArtist = ref('');
-	const selectedWord = ref('');
-	const selectedCount = ref('');
-	const selectedSnippets = ref([]);
+const hoveredArtist = ref('');
+const hoveredWord = ref('');
+const hoveredCount = ref('');
+const hoveredPercentage = ref('');
+const selectedArtist = ref('');
+const selectedWord = ref('');
+const selectedCount = ref('');
+const selectedPercentage = ref('');
+const selectedSnippets = ref([]);
+const activeConceptSnippetTab = ref('');
 
-	const escapeHtml = (value) =>
-		String(value)
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;')
-			.replace(/'/g, '&#039;');
+const escapeHtml = (value) =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 
-	const escapeRegExp = (value) =>
-		String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegExp = (value) =>
+  String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-	const highlightWord = (text, word) => {
-		const safe = escapeHtml(text);
-		if (!word) return safe;
-		const regex = new RegExp(escapeRegExp(word), 'gi');
-		return safe.replace(
-			regex,
-			(match) =>
-				`<mark style="background:#fde68a;padding:0 2px;border-radius:2px;">${match}</mark>`
-		);
-	};
+const highlightWord = (text, word) => {
+  const safe = escapeHtml(text);
+  if (!word) return safe;
+  const regex = new RegExp(`(${escapeRegExp(word)})`, 'gi');
+  return safe.replace(
+    regex,
+    '<mark class="bg-amber-200 text-amber-900 font-semibold px-1 rounded">$1</mark>'
+  );
+};
 
-	onMounted(() => {
-		let ctx1 = document.getElementById('line');
-		let config1 = {
-			type: 'line',
-			data: {
-				labels: [1980, 1981, 1982, 1983, 1990, 1991, 1995],
-				datasets: [
-					{
-						label: 'beautiful',
-						data: [65, 59, 80, 81, 56, 55, 40],
-						fill: false,
-						borderColor: 'rgb(75, 192, 192)',
-						backgroundColor: 'rgba(75, 192, 192, 0.2)',
-						tension: 0.1,
-					},
-					{
-						label: 'profound',
-						data: [6, 59, 70, 31, 36, 55, 0],
-						fill: false,
-						borderColor: 'rgb(192, 75, 192)',
-						backgroundColor: 'rgba(192, 75, 192, 0.2)',
-						tension: 0.1,
-					},
-				],
-			},
-		};
+function seededRandom(seed) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
 
-		let ctx2 = document.getElementById('bar-category');
-		let config2 = {
-			type: 'bar',
-			data: {
-				labels: [
-					'Poetry',
-					'Concerts',
-					'Theater',
-					'Dance',
-					'Exhibitions',
-					'Operas',
-					'Dance',
-					'Movies',
-				],
-				datasets: [
-					{
-						label: 'Beautiful',
-						data: [12, 19, 20, 5, 8, 3, 6, 1],
-						backgroundColor: [
-							'rgba(255, 99, 132, 0.2)',
-							'rgba(54, 162, 235, 0.2)',
-							'rgba(255, 206, 86, 0.2)',
-							'rgba(75, 192, 192, 0.2)',
-							'rgba(153, 102, 255, 0.2)',
-							'rgba(255, 159, 64, 0.2)',
-							'rgba(255, 15, 64, 0.2)',
-							'rgba(25, 159, 64, 0.2)',
-						],
-						borderColor: [
-							'rgba(255, 99, 132, 1)',
-							'rgba(54, 162, 235, 1)',
-							'rgba(255, 206, 86, 1)',
-							'rgba(75, 192, 192, 1)',
-							'rgba(153, 102, 255, 1)',
-							'rgba(255, 159, 64, 1)',
-							'rgba(255, 15, 64, 1)',
-							'rgba(25, 159, 64, 1)',
-						],
-						borderWidth: 1,
-					},
-					{
-						label: 'profound',
-						data: [12, 1, 10, 15, 4, 3, 12, 20],
-						backgroundColor: [
-							'rgba(255, 99, 132, 0.2)',
-							'rgba(54, 162, 235, 0.2)',
-							'rgba(255, 206, 86, 0.2)',
-							'rgba(75, 192, 192, 0.2)',
-							'rgba(153, 102, 255, 0.2)',
-							'rgba(255, 159, 64, 0.2)',
-							'rgba(255, 15, 64, 0.2)',
-							'rgba(25, 159, 64, 0.2)',
-						],
-						borderColor: [
-							'rgba(255, 99, 132, 1)',
-							'rgba(54, 162, 235, 1)',
-							'rgba(255, 206, 86, 1)',
-							'rgba(75, 192, 192, 1)',
-							'rgba(153, 102, 255, 1)',
-							'rgba(255, 159, 64, 1)',
-							'rgba(255, 15, 64, 1)',
-							'rgba(25, 159, 64, 1)',
-						],
-						borderWidth: 1,
-					},
-				],
-			},
-			options: {
-				scales: {
-					y: {
-						beginAtZero: true,
-					},
-				},
-			},
-		};
+function getRandomColor(seed, alpha = 1) {
+  const palette = [
+    [59, 130, 246],  // Blue
+    [236, 72, 153],  // Pink
+    [16, 185, 129],  // Emerald
+    [245, 158, 11],  // Amber
+    [139, 92, 246],  // Purple
+    [239, 68, 68],   // Red
+    [14, 165, 233],  // Sky
+    [20, 184, 166],  // Teal
+  ];
+  const [r, g, b] = palette[seed % palette.length] || [
+    Math.floor(seededRandom(seed + 10) * 200) + 30,
+    Math.floor(seededRandom(seed + 11) * 200) + 30,
+    Math.floor(seededRandom(seed + 12) * 200) + 30
+  ];
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
-		let ctx4 = document.getElementById('bar-concept');
-		let config4 = {
-			type: 'bar',
-			data: {
-				labels: [
-					'Cognitive',
-					'Evaluative',
-					'Mimetic',
-					'Aesthetic',
-					'Emotion',
-					'Visual',
-				],
-				datasets: [
-					{
-						label: 'Beautiful',
-						data: [12, 19, 20, 5, 8, 3],
-						backgroundColor: [
-							'rgba(255, 99, 132, 0.2)',
-							'rgba(54, 162, 235, 0.2)',
-							'rgba(255, 206, 86, 0.2)',
-							'rgba(75, 192, 192, 0.2)',
-							'rgba(153, 102, 255, 0.2)',
-							'rgba(255, 159, 64, 0.2)',
-						],
-						borderColor: [
-							'rgba(255, 99, 132, 1)',
-							'rgba(54, 162, 235, 1)',
-							'rgba(255, 206, 86, 1)',
-							'rgba(75, 192, 192, 1)',
-							'rgba(153, 102, 255, 1)',
-							'rgba(255, 159, 64, 1)',
-						],
-						borderWidth: 1,
-					},
-					{
-						label: 'profound',
-						data: [12, 1, 10, 15, 4, 3],
-						backgroundColor: [
-							'rgba(255, 99, 132, 0.2)',
-							'rgba(54, 162, 235, 0.2)',
-							'rgba(255, 206, 86, 0.2)',
-							'rgba(75, 192, 192, 0.2)',
-							'rgba(153, 102, 255, 0.2)',
-							'rgba(255, 159, 64, 0.2)',
-						],
-						borderColor: [
-							'rgba(255, 99, 132, 1)',
-							'rgba(54, 162, 235, 1)',
-							'rgba(255, 206, 86, 1)',
-							'rgba(75, 192, 192, 1)',
-							'rgba(153, 102, 255, 1)',
-							'rgba(255, 159, 64, 1)',
-						],
-						borderWidth: 1,
-					},
-				],
-			},
-			options: {
-				scales: {
-					y: {
-						beginAtZero: true,
-					},
-				},
-			},
-		};
+const destroyAllCharts = () => {
+  if (chart1) { chart1.destroy(); chart1 = null; }
+  if (chart2) { chart2.destroy(); chart2 = null; }
+  if (chart3) { chart3.destroy(); chart3 = null; }
+  if (chart5) { chart5.destroy(); chart5 = null; }
+};
 
-		let ctx5 = document.getElementById('bar-sentiment');
-		let config5 = {
-			type: 'bar',
-			data: {
-				labels: ['Positive', 'Negative', 'Neutral'],
-				datasets: [
-					{
-						label: 'Beautiful',
-						data: [12, 1, 20],
-						backgroundColor: [
-							'rgba(255, 99, 132, 0.2)',
-							'rgba(54, 162, 235, 0.2)',
-							'rgba(255, 206, 86, 0.2)',
-							'rgba(75, 192, 192, 0.2)',
-							'rgba(153, 102, 255, 0.2)',
-							'rgba(255, 159, 64, 0.2)',
-						],
-						borderColor: [
-							'rgba(255, 99, 132, 1)',
-							'rgba(54, 162, 235, 1)',
-							'rgba(255, 206, 86, 1)',
-							'rgba(75, 192, 192, 1)',
-							'rgba(153, 102, 255, 1)',
-							'rgba(255, 159, 64, 1)',
-						],
-						borderWidth: 1,
-					},
-					{
-						label: 'profound',
-						data: [12, 1, 3],
-						backgroundColor: [
-							'rgba(255, 99, 132, 0.2)',
-							'rgba(54, 162, 235, 0.2)',
-							'rgba(255, 206, 86, 0.2)',
-						],
-						borderColor: [
-							'rgba(255, 99, 132, 1)',
-							'rgba(54, 162, 235, 1)',
-							'rgba(255, 206, 86, 1)',
-						],
-						borderWidth: 1,
-					},
-				],
-			},
-			options: {
-				scales: {
-					y: {
-						beginAtZero: true,
-					},
-				},
-			},
-		};
+const results = computed(() => store.getResults || []);
 
-		let ctx3 = document.getElementById('pie');
-		let config3 = {
-			type: 'doughnut',
-			data: {
-				labels: ['Mozart', 'Beethoven', 'Bach'],
-				datasets: [
-					{
-						label: 'Dataset',
-						data: [30, 5, 10],
-						backgroundColor: [
-							'rgb(255, 99, 132)',
-							'rgb(54, 162, 235)',
-							'rgb(255, 205, 86)',
-						],
-						hoverOffset: 4,
-					},
-				],
-			},
-		};
+const activeConceptRecord = computed(() => {
+  if (!results.value.length) return null;
+  if (!activeConceptSnippetTab.value) return results.value[0];
+  return results.value.find((r) => r.Word === activeConceptSnippetTab.value) || results.value[0];
+});
 
-		chart1 = new Chart(ctx1, config1);
-		chart2 = new Chart(ctx2, config2);
-		chart3 = new Chart(ctx3, config3);
-		chart4 = new Chart(ctx4, config4);
-		chart5 = new Chart(ctx5, config5);
-	});
+const renderCharts = () => {
+  destroyAllCharts();
 
-	watch(
-		() => store.getResults,
-		() => {
-			let all_years = new Set();
-			// Collect all unique years
-			store.getResults.forEach((result) => {
-				result.YearCounts.forEach((item) => all_years.add(item.year));
-			});
+  const ctx1 = document.getElementById('line');
+  const ctx2 = document.getElementById('bar-category');
+  const ctx3 = document.getElementById('pie');
+  const ctx5 = document.getElementById('bar-sentiment');
 
-			// Convert Set to sorted array for labels
-			let line_labels = Array.from(all_years).sort((a, b) => a - b);
+  if (!ctx1 || !ctx2 || !ctx3 || !ctx5) return;
 
-			// Create datasets array
-			let line_datasets = store.getResults.map((result, index) => {
-				return {
-					label: result.Word, // Use the word as the label
-					data: line_labels.map((year) => {
-						let entry = result.YearCounts.find((item) => item.year === year);
-						return entry ? entry.count : 0; // Fill missing years with 0
-					}),
-					fill: false,
-					borderColor: getRandomColor(index),
-					backgroundColor: getRandomColor(index, 0.2),
-					tension: 0.1,
-				};
-			});
+  const currentResults = store.getResults || [];
 
-			let maxValue = [...line_datasets.flatMap((dataset) => dataset.data)].sort(
-				(a, b) => b - a
-			)[1];
+  if (currentResults.length && !activeConceptSnippetTab.value) {
+    activeConceptSnippetTab.value = currentResults[0].Word;
+  }
 
-			// Categories
+  // 1. Line Chart: Years
+  const all_years = new Set();
+  currentResults.forEach((result) => {
+    (result.YearCounts || []).forEach((item) => {
+      if (item.year) all_years.add(item.year);
+    });
+  });
 
-			let all_categories = new Set();
-			store.getResults.forEach((result) => {
-				result.CategoryCounts.forEach((item) =>
-					all_categories.add(item.category)
-				);
-			});
+  const line_labels = all_years.size
+    ? Array.from(all_years).sort((a, b) => a - b)
+    : [1985, 1990, 1995, 2000];
 
-			let category_labels = Array.from(all_categories).sort((a, b) => a - b);
-			// Create datasets array
-			let category_datasets = store.getResults.map((result, index) => {
-				return {
-					label: result.Word, // Use the word as the label
-					data: category_labels.map((category) => {
-						let entry = result.CategoryCounts.find(
-							(item) => item.category === category
-						);
-						return entry ? entry.count : 0; // Fill missing years with 0
-					}),
-					borderColor: getRandomColor(index),
-					backgroundColor: getRandomColor(index, 0.2),
-					borderWidth: 1,
-				};
-			});
+  const line_datasets = currentResults.length
+    ? currentResults.map((result, index) => ({
+        label: result.Word,
+        data: line_labels.map((year) => {
+          const entry = (result.YearCounts || []).find((item) => item.year === year);
+          return entry ? entry.count : 0;
+        }),
+        fill: false,
+        borderColor: getRandomColor(index),
+        backgroundColor: getRandomColor(index, 0.2),
+        tension: 0.2,
+      }))
+    : [
+        {
+          label: 'Sample: beautiful',
+          data: [12, 19, 35, 28],
+          borderColor: 'rgb(59, 130, 246)',
+          backgroundColor: 'rgba(59, 130, 246, 0.2)',
+          tension: 0.2,
+        }
+      ];
 
-			//Concepts
-			let all_concepts = new Set();
-			store.getResults.forEach((result) => {
-				result.ConceptCounts.forEach((item) => all_concepts.add(item.concept));
-			});
+  chart1 = new Chart(ctx1, {
+    type: 'line',
+    data: { labels: line_labels, datasets: line_datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
 
-			let concept_labels = Array.from(all_concepts).sort((a, b) => a - b);
-			// Create datasets array
-			let concept_datasets = store.getResults.map((result, index) => {
-				return {
-					label: result.Word, // Use the word as the label
-					data: concept_labels.map((concept) => {
-						let entry = result.ConceptCounts.find(
-							(item) => item.concept === concept
-						);
-						return entry ? entry.count : 0; // Fill missing years with 0
-					}),
-					borderColor: getRandomColor(index),
-					backgroundColor: getRandomColor(index, 0.2),
-					borderWidth: 1,
-				};
-			});
+  // 2. Bar Chart: 9 Primary Canonical Categories
+  const category_labels = [
+    'Theater & Drama',
+    'Concerts & Music',
+    'Art & Exhibitions',
+    'Films & Cinema',
+    'Opera',
+    'Dance & Ballet',
+    'Poetry & Literature',
+    'Television & Radio',
+    'Multiple / Other'
+  ];
 
-			//Sentiment
-			let all_sentiments = new Set();
-			store.getResults.forEach((result) => {
-				result.SentimentCounts.forEach((item) =>
-					all_sentiments.add(item.sentiment)
-				);
-			});
+  const category_datasets = currentResults.length
+    ? currentResults.map((result, index) => ({
+        label: result.Word,
+        data: category_labels.map((category) => {
+          const entry = (result.CategoryCounts || []).find((item) => item.category === category);
+          return entry ? entry.count : 0;
+        }),
+        borderColor: getRandomColor(index),
+        backgroundColor: getRandomColor(index, 0.65),
+        borderWidth: 1,
+      }))
+    : [
+        {
+          label: 'Sample: beautiful',
+          data: [12.79, 37.13, 17.16, 5.87, 9.77, 3.46, 6.45, 1.22, 5.37],
+          backgroundColor: 'rgba(59, 130, 246, 0.65)',
+          borderColor: 'rgb(59, 130, 246)',
+          borderWidth: 1,
+        }
+      ];
 
-			let sentiment_labels = Array.from(all_sentiments).sort((a, b) => a - b);
-			// Create datasets array
-			let sentiment_datasets = store.getResults.map((result, index) => {
-				return {
-					label: result.Word, // Use the word as the label
-					data: sentiment_labels.map((sentiment) => {
-						let entry = result.SentimentCounts.find(
-							(item) => item.sentiment === sentiment
-						);
-						return entry ? entry.count : 0; // Fill missing years with 0
-					}),
-					borderColor: getRandomColor(index),
-					backgroundColor: getRandomColor(index, 0.2),
-					borderWidth: 1,
-				};
-			});
+  chart2 = new Chart(ctx2, {
+    type: 'bar',
+    data: { labels: category_labels, datasets: category_datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: (item) => {
+              const word = item.dataset.label || '';
+              const value = item.formattedValue ?? item.raw ?? '';
+              return word ? `Word: #${word} - ${value}%` : `${value}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (value) => `${value}%`
+          }
+        }
+      }
+    }
+  });
 
-			let all_artists = new Set();
-			// Collect all unique years
-			store.getResults.forEach((result) => {
-				result.ArtistCounts.forEach((item) => all_artists.add(item.artist));
-			});
+  // 3. Sentiment Chart: Primary Sentiments
+  const all_sentiments = ['Positive', 'Neutral', 'Negative', 'Mixed'];
+  const sentiment_datasets = currentResults.length
+    ? currentResults.map((result, index) => ({
+        label: result.Word,
+        data: all_sentiments.map((sentiment) => {
+          const entry = (result.SentimentCounts || []).find((item) => item.sentiment?.toLowerCase() === sentiment.toLowerCase());
+          return entry ? entry.count : 0;
+        }),
+        borderColor: getRandomColor(index),
+        backgroundColor: getRandomColor(index, 0.65),
+        borderWidth: 1,
+      }))
+    : [
+        {
+          label: 'Sample: beautiful',
+          data: [65, 25, 8, 2],
+          backgroundColor: ['rgba(16, 185, 129, 0.65)', 'rgba(100, 116, 139, 0.65)', 'rgba(239, 68, 68, 0.65)', 'rgba(245, 158, 11, 0.65)'],
+          borderColor: ['rgb(16, 185, 129)', 'rgb(100, 116, 139)', 'rgb(239, 68, 68)', 'rgb(245, 158, 11)'],
+          borderWidth: 1
+        }
+      ];
 
-			let donut_labels = Array.from(all_artists).sort((a, b) => a - b);
+  chart5 = new Chart(ctx5, {
+    type: 'bar',
+    data: { labels: all_sentiments, datasets: sentiment_datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: (item) => {
+              const word = item.dataset.label || '';
+              const value = item.formattedValue ?? item.raw ?? '';
+              return word ? `Word: #${word} - ${value}%` : `${value}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (value) => `${value}%`
+          }
+        }
+      }
+    }
+  });
 
-			// Create datasets array
-			let donut_datasets = store.getResults.map((result, index) => {
-				return {
-					label: result.Word, // Use the word as the label
-					data: donut_labels.map((artist) => {
-						let entry = result.ArtistCounts.find(
-							(item) => item.artist === artist
-						);
-						return entry ? entry.count : 0; // Fill missing years with 0
-					}),
-					borderColor: getRandomColor(index),
-					backgroundColor: getRandomColor(index, 0.2),
-					hoverOffset: 4,
-				};
-			});
 
-			const artistSnippetMap = {};
-			store.getResults.forEach((result) => {
-				const byArtist = {};
-				(result.ArtistSnippets || []).forEach((entry) => {
-					byArtist[entry.artist] = entry.snippets || [];
-				});
-				artistSnippetMap[result.Word] = byArtist;
-			});
+  // 4. Donut Chart: Artists with Percentages
+  const top_artists_set = new Set();
+  currentResults.forEach((result) => {
+    (result.ArtistCounts || []).slice(0, 12).forEach((item) => {
+      if (item.artist) top_artists_set.add(item.artist);
+    });
+  });
 
-			const getSliceInfo = (chart, element) => {
-				if (!element) return null;
-				const dataset = chart.data.datasets[element.datasetIndex];
-				const word = dataset?.label || '';
-				const artist = chart.data.labels?.[element.index] || '';
-				const count = dataset?.data?.[element.index] ?? '';
-				const snippets = artistSnippetMap[word]?.[artist] || [];
-				return { artist, word, count, snippets };
-			};
+  const donut_labels = top_artists_set.size
+    ? Array.from(top_artists_set)
+    : ['Beethoven', 'Mozart', 'Brahms', 'Bach', 'Shakespeare', 'Pinter'];
 
-			function seededRandom(seed) {
-				let x = Math.sin(seed) * 10000;
-				return x - Math.floor(x);
-			}
+  const artistMetaMap = {};
+  currentResults.forEach((result) => {
+    (result.ArtistCounts || []).forEach((item) => {
+      if (!artistMetaMap[result.Word]) artistMetaMap[result.Word] = {};
+      artistMetaMap[result.Word][item.artist] = {
+        count: item.count,
+        percentage: item.percentage || 0
+      };
+    });
+  });
 
-			function getRandomColor(seed, alpha = 1) {
-				const r = Math.floor(seededRandom(seed + 10) * 255);
-				const g = Math.floor(seededRandom(seed + 11) * 255);
-				const b = Math.floor(seededRandom(seed + 12) * 255);
+  const donut_datasets = currentResults.length
+    ? currentResults.map((result, index) => ({
+        label: result.Word,
+        data: donut_labels.map((artist) => {
+          const entry = (result.ArtistCounts || []).find((item) => item.artist === artist);
+          return entry ? entry.count : 0;
+        }),
+        backgroundColor: donut_labels.map((_, i) => getRandomColor(i, 0.75)),
+        hoverOffset: 8,
+      }))
+    : [
+        {
+          label: 'Sample',
+          data: [40, 25, 20, 15, 10, 8],
+          backgroundColor: ['#3b82f6', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6'],
+          hoverOffset: 8
+        }
+      ];
 
-				return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-			}
+  const artistSnippetMap = {};
+  currentResults.forEach((result) => {
+    const byArtist = {};
+    (result.ArtistSnippets || []).forEach((entry) => {
+      byArtist[entry.artist] = entry.snippets || [];
+    });
+    artistSnippetMap[result.Word] = byArtist;
+  });
 
-			let ctx1 = document.getElementById('line');
-			let config1 = {
-				type: 'line',
-				data: {
-					labels: line_labels,
-					datasets: line_datasets,
-				},
-				options: {
-					scales: {
-						y: {
-							max: maxValue + 100,
-						},
-					},
-					responsive: true,
-				},
-			};
+  const getSliceInfo = (chart, element) => {
+    if (!element) return null;
+    const dataset = chart.data.datasets[element.datasetIndex];
+    const word = dataset?.label || '';
+    const artist = chart.data.labels?.[element.index] || '';
+    const count = dataset?.data?.[element.index] ?? '';
+    const pct = artistMetaMap[word]?.[artist]?.percentage ?? '';
+    const snippets = artistSnippetMap[word]?.[artist] || [];
+    return { artist, word, count, percentage: pct, snippets };
+  };
 
-			let ctx2 = document.getElementById('bar-category');
-			let config2 = {
-				type: 'bar',
-				data: {
-					labels: category_labels,
-					datasets: category_datasets,
-				},
-				options: {
-					scales: {
-						y: {
-							beginAtZero: true,
-						},
-					},
-				},
-			};
+  chart3 = new Chart(ctx3, {
+    type: 'doughnut',
+    data: { labels: donut_labels, datasets: donut_datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      onHover: (_event, elements, chart) => {
+        if (!elements?.length) {
+          hoveredArtist.value = '';
+          hoveredWord.value = '';
+          hoveredCount.value = '';
+          hoveredPercentage.value = '';
+          return;
+        }
+        const info = getSliceInfo(chart, elements[0]);
+        if (!info) return;
+        hoveredArtist.value = info.artist;
+        hoveredWord.value = info.word;
+        hoveredCount.value = info.count;
+        hoveredPercentage.value = info.percentage ? `${info.percentage}%` : '';
+      },
+      onClick: (_event, elements, chart) => {
+        if (!elements?.length) return;
+        const info = getSliceInfo(chart, elements[0]);
+        if (!info) return;
+        selectedArtist.value = info.artist;
+        selectedWord.value = info.word;
+        selectedCount.value = info.count;
+        selectedPercentage.value = info.percentage ? `${info.percentage}%` : '';
+        selectedSnippets.value = info.snippets;
+      },
+      plugins: {
+        legend: { position: 'right' },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            title: (items) => items[0]?.label || '',
+            label: (item) => {
+              const word = item.dataset.label || '';
+              const artist = item.label || '';
+              const value = item.formattedValue ?? item.raw ?? '';
+              const pct = artistMetaMap[word]?.[artist]?.percentage;
+              const pctStr = pct !== undefined ? ` (${pct}%)` : '';
+              return word ? `Word: ${word} - ${value} mentions${pctStr}` : `${value}`;
+            },
+          },
+        },
+      },
+    },
+  });
+};
 
-			let ctx4 = document.getElementById('bar-concept');
-			let config4 = {
-				type: 'bar',
-				data: {
-					labels: concept_labels,
-					datasets: concept_datasets,
-				},
-				options: {
-					scales: {
-						y: {
-							beginAtZero: true,
-						},
-					},
-				},
-			};
+onMounted(() => {
+  renderCharts();
+});
 
-			let ctx5 = document.getElementById('bar-sentiment');
-			let config5 = {
-				type: 'bar',
-				data: {
-					labels: sentiment_labels,
-					datasets: sentiment_datasets,
-				},
-				options: {
-					scales: {
-						y: {
-							beginAtZero: true,
-						},
-					},
-				},
-			};
-			let ctx3 = document.getElementById('pie');
-			let config3 = {
-				type: 'doughnut',
-				data: {
-					labels: donut_labels,
-					datasets: donut_datasets,
-				},
-				options: {
-					onHover: (_event, elements, chart) => {
-						if (!elements?.length) {
-							hoveredArtist.value = '';
-							hoveredWord.value = '';
-							hoveredCount.value = '';
-							return;
-						}
-						const info = getSliceInfo(chart, elements[0]);
-						if (!info) return;
-						hoveredArtist.value = info.artist;
-						hoveredWord.value = info.word;
-						hoveredCount.value = info.count;
-					},
-					onClick: (_event, elements, chart) => {
-						if (!elements?.length) {
-							return;
-						}
-						const info = getSliceInfo(chart, elements[0]);
-						if (!info) return;
-						selectedArtist.value = info.artist;
-						selectedWord.value = info.word;
-						selectedCount.value = info.count;
-						selectedSnippets.value = info.snippets;
-					},
-					plugins: {
-						tooltip: {
-							enabled: false,
-						},
-					},
-				},
-			};
+onUnmounted(() => {
+  destroyAllCharts();
+});
 
-			if (chart1) {
-				chart1.destroy();
-				chart2.destroy();
-				chart3.destroy();
-				chart4.destroy();
-				chart5.destroy();
-
-				chart1 = new Chart(ctx1, config1);
-				chart2 = new Chart(ctx2, config2);
-				chart3 = new Chart(ctx3, config3);
-				chart4 = new Chart(ctx4, config4);
-				chart5 = new Chart(ctx5, config5);
-			} else {
-				chart1 = new Chart(ctx1, config1);
-				chart2 = new Chart(ctx2, config2);
-				chart3 = new Chart(ctx3, config3);
-				chart4 = new Chart(ctx4, config4);
-				chart5 = new Chart(ctx5, config5);
-			}
-		}
-	);
-
-	// Search state
-	const searchTerm = ref('');
-	let words = ref('');
-	// Define the function to send the search to GraphQL API
-
-	const searchExpressions = async () => {
-		store.setSearchTerm(searchTerm);
-		store.searchExpressions();
-	};
+watch(
+  () => store.getResults,
+  () => {
+    renderCharts();
+  },
+  { deep: true }
+);
 </script>
 
 <template>
-	<div class="bg-slate-50 p-5 rounded-xl my-5">
-		<p class="text-xl">Expression Timeline</p>
-		<canvas id="line"></canvas>
-	</div>
-	<div class="bg-slate-50 p-5 rounded-xl my-5">
-		<p class="text-xl">Artistic Categories</p>
-		<canvas id="bar-category"></canvas>
-	</div>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <!-- Grid of Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- 1. Timeline Chart -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span>📈 Expression Timeline</span>
+          </h3>
+          <span class="text-xs text-slate-400">Historical mentions by year</span>
+        </div>
+        <div class="h-72">
+          <canvas id="line"></canvas>
+        </div>
+      </div>
 
-	<!---
-	<div class="bg-slate-50 p-5 rounded-xl my-5">
-		<p class="text-xl">Concepts Categories</p>
-		<canvas id="bar-concept"></canvas>
-	</div>
+      <!-- 2. Category Breakdown Chart -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span>🎨 Artistic Categories</span>
+          </h3>
+          <span class="text-xs text-slate-400">Distribution across genres</span>
+        </div>
+        <div class="h-72">
+          <canvas id="bar-category"></canvas>
+        </div>
+      </div>
 
-	-->
+      <!-- 3. Sentiment Breakdown Chart -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span>💭 Sentiment Distribution</span>
+          </h3>
+          <span class="text-xs text-slate-400">Positive, Neutral & Negative</span>
+        </div>
+        <div class="h-72">
+          <canvas id="bar-sentiment"></canvas>
+        </div>
+      </div>
 
-	<div class="bg-slate-50 p-5 rounded-xl my-5">
-		<p class="text-xl">Sentiment Analysis</p>
-		<canvas id="bar-sentiment"></canvas>
-	</div>
-	<div class="bg-slate-50 p-5 rounded-xl my-5 relative">
-		<p class="text-xl">Artist</p>
-		<canvas id="pie"></canvas>
-		<div class="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-			<div v-if="hoveredWord">
-				<p class="text-base font-semibold text-slate-900">
-					{{ hoveredArtist }}
-				</p>
-				<p class="text-sm text-slate-600">
-					Word:
-					<span class="font-semibold text-slate-800">{{ hoveredWord }}</span>
-					({{ hoveredCount }})
-				</p>
-			</div>
-			<p v-else class="text-sm text-slate-500">
-				Hover a slice to see artist, word, and count.
-			</p>
+      <!-- 4. Artist Distribution Donut Chart with Percentages -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span>🎭 Artist Associations & Percentages</span>
+          </h3>
+          <span class="text-xs text-slate-400">Top artists critiqued with this concept</span>
+        </div>
 
-			<div class="mt-3">
-				<p v-if="selectedWord" class="text-sm font-semibold text-slate-700">
-					Snippets for {{ selectedArtist }} · {{ selectedWord }} ({{
-						selectedCount
-					}})
-				</p>
-				<p v-else class="text-sm text-slate-500">
-					Click a slice to view snippets.
-				</p>
-				<div
-					v-if="selectedWord"
-					class="mt-2 max-h-64 overflow-y-auto space-y-2 pr-2"
-				>
-					<p
-						v-for="(snippet, index) in selectedSnippets"
-						:key="`${selectedArtist}-${index}`"
-						class="text-sm text-slate-700 leading-6"
-						v-html="highlightWord(snippet, selectedWord)"
-					></p>
-				</div>
-			</div>
-		</div>
-	</div>
+        <div class="h-72">
+          <canvas id="pie"></canvas>
+        </div>
+
+        <!-- Interactive Snippet Inspection Box -->
+        <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
+          <div v-if="hoveredWord">
+            <p class="text-sm font-semibold text-slate-900">
+              {{ hoveredArtist }}
+            </p>
+            <p class="text-xs text-slate-600">
+              Concept: <strong class="text-slate-800">#{{ hoveredWord }}</strong> &middot;
+              <strong class="text-indigo-700">{{ hoveredCount }} mentions</strong>
+              <span v-if="hoveredPercentage" class="ml-1 text-slate-500">({{ hoveredPercentage }} of word)</span>
+            </p>
+          </div>
+          <p v-else class="text-xs text-slate-500">
+            Hover over a chart slice to view artist share, or click a slice to load artist-specific sentence snippets.
+          </p>
+
+          <div v-if="selectedWord" class="pt-2 border-t border-slate-200 space-y-2">
+            <div class="flex items-center justify-between">
+              <p class="text-xs font-bold text-slate-800">
+                Snippets for {{ selectedArtist }} &middot; #{{ selectedWord }} ({{ selectedCount }} mentions{{ selectedPercentage ? ', ' + selectedPercentage : '' }})
+              </p>
+              <button
+                @click="selectedWord = ''"
+                class="text-[10px] text-slate-500 hover:text-slate-800 font-semibold"
+              >
+                ✕ Clear
+              </button>
+            </div>
+            <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+              <p
+                v-for="(snippet, index) in selectedSnippets"
+                :key="`${selectedArtist}-${index}`"
+                class="text-xs bg-white p-2.5 rounded-lg border border-slate-200/80 text-slate-700 leading-relaxed"
+                v-html="highlightWord(snippet, selectedWord)"
+              ></p>
+              <p v-if="!selectedSnippets.length" class="text-xs text-slate-400 italic">
+                No snippets available for this artist/word combination.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Dedicated Concept Context Snippets Section -->
+    <div v-if="results.length" class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span>📖 Contextual Concept Snippets</span>
+          </h3>
+          <p class="text-xs text-slate-500">
+            Representative sentences extracted from historical reviews where the searched concept appears.
+          </p>
+        </div>
+
+        <!-- Concept Switcher Tabs -->
+        <div class="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
+          <button
+            v-for="res in results"
+            :key="res.Word"
+            @click="activeConceptSnippetTab = res.Word"
+            :class="[
+              'text-xs font-semibold px-3 py-1 rounded-lg border transition-colors',
+              activeConceptSnippetTab === res.Word
+                ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+            ]"
+          >
+            #{{ res.Word }} ({{ res.TotalCount }})
+          </button>
+        </div>
+      </div>
+
+      <!-- Snippets Display Grid -->
+      <div v-if="activeConceptRecord" class="space-y-2">
+        <div class="flex items-center justify-between text-xs text-slate-600">
+          <span>Showing context snippets for <strong class="text-slate-900">#{{ activeConceptRecord.Word }}</strong>:</span>
+          <span class="text-slate-400">{{ activeConceptRecord.ConceptSnippets?.length || 0 }} samples available</span>
+        </div>
+
+        <div v-if="activeConceptRecord.ConceptSnippets?.length" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+          <div
+            v-for="(snippet, sIdx) in activeConceptRecord.ConceptSnippets"
+            :key="sIdx"
+            class="bg-amber-50/60 p-3 rounded-xl border border-amber-200/70 text-xs text-slate-800 leading-relaxed space-y-1"
+          >
+            <div class="text-[10px] text-amber-800 font-bold uppercase tracking-wider">Example {{ sIdx + 1 }}</div>
+            <p v-html="highlightWord(snippet, activeConceptRecord.Word)"></p>
+          </div>
+        </div>
+
+        <p v-else class="text-xs text-slate-400 italic p-4 text-center bg-slate-50 rounded-xl">
+          No direct sentence snippets recorded for this concept.
+        </p>
+      </div>
+    </div>
+  </div>
 </template>

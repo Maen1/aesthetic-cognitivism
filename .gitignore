@@ -23,7 +23,25 @@ ui/dist-ssr
 *.sln
 *.sw?
 *.pyc
-# cdhu
+__pycache__/
 
-app/__pycache__/
-data
+# Large datasets & DB dumps
+data/*.jsonl
+data/*.csv
+data/*.xlsx
+data/*.json
+data/*.parquet
+data/*.gz
+data/*.zip
+data/**/*.bson
+data/**/*.json
+data/aesthetic/
+data/aestheticv2/
+data/aestheticv3/
+
+
+# Agent and Development Tracking
+AGENTS.md
+[Dd]evelopment[Ll]og*.md
+[Dd]evelopment_[Ll]og*.md
+docs/

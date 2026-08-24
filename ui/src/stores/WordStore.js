@@ -1,95 +1,122 @@
 import { defineStore } from 'pinia';
 
+const getGraphQLEndpoint = () => {
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '5173') {
+    return 'http://localhost:8000/api/graphql/';
+  }
+  return '/api/graphql/';
+};
+
 export const useWordStore = defineStore('Word', {
-	state: () => ({
-		count: 0,
-		name: 'Eduardo',
-		searchTerm: '',
-		words: [],
-		results: [],
-	}),
+  state: () => ({
+    count: 0,
+    name: 'Eduardo',
+    searchTerm: '',
+    words: [],
+    results: [],
+    isLoading: false,
+    errorMessage: null
+  }),
 
-	getters: {
-		doubleCount: (state) => state.count * 2,
-		getWords: (state) => state.words,
-		getWordsLength: (state) => state.words.length,
-		getResults: (state) => state.results,
-	},
-	actions: {
-		increment() {
-			this.count++;
-		},
+  getters: {
+    doubleCount: (state) => state.count * 2,
+    getWords: (state) => state.words,
+    getWordsLength: (state) => state.words.length,
+    getResults: (state) => state.results,
+  },
 
-		searchWords(words) {
-			this.words = words;
-			console.log(this.words);
-		},
+  actions: {
+    increment() {
+      this.count++;
+    },
 
-		setSearchTerm(searchTerm) {
-			this.searchTerm = searchTerm;
-		},
+    searchWords(words) {
+      this.words = words;
+    },
 
-		setResults(results) {
-			this.results = results;
-		},
+    setSearchTerm(searchTerm) {
+      this.searchTerm = searchTerm;
+    },
 
-		async searchExpressions() {
-			if (!this.searchTerm.trim()) return; // Avoid sending empty searches
+    setResults(results) {
+      this.results = results || [];
+    },
 
-			const words = JSON.stringify(
-				this.searchTerm.split(/\s+/).filter((word) => word.trim())
-			);
-			this.searchWords(JSON.parse(words));
-			console.log('words to query', JSON.parse(words));
+    async searchExpressions() {
+      if (!this.searchTerm || !this.searchTerm.trim()) return;
 
-			const query = `
-				{ 
-				wordCounts(words: ${words}) {
-					Word
-					TotalCount
-					ArtistSnippets {
-					artist
-					snippets
-					}
-					CategoryCounts {
-					category 
-					count
-					}
-					ArtistCounts {
-					artist 
-					count
-					}
-					ConceptCounts {
-					concept 
-					count
-					}
-					SentimentCounts {
-					sentiment 
-					count
-					}
-					YearCounts {
-					year 
-					count
-					}
-				}
-			}
-		`;
+      const parsedWords = this.searchTerm
+        .split(/\s+/)
+        .map((w) => w.trim().toLowerCase())
+        .filter(Boolean);
 
-			try {
-				const GRAPHQL_ENDPOINT = 'http://130.238.146.150/api/graphql/'; // prod
-				//const GRAPHQL_ENDPOINT = 'http://localhost:8000/api/graphql/'; // dev
-				const response = await fetch(GRAPHQL_ENDPOINT, {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-					},
-					body: JSON.stringify({ query }),
-				});
-				const result = await response.json();
-				this.setResults(result.data['wordCounts']);
-			} catch (error) {
-				console.error('Error fetching data:', error);
-			}
-		},
-	},
+      if (!parsedWords.length) return;
+
+      this.searchWords(parsedWords);
+      this.isLoading = true;
+      this.errorMessage = null;
+
+      const query = `
+        query GetWordCounts($words: [String!]!) {
+          wordCounts(words: $words) {
+            Word
+            TotalCount
+            WordConcept
+            ArtistSnippets {
+              artist
+              snippets
+            }
+            CategoryCounts {
+              category
+              count
+            }
+            ArtistCounts {
+              artist
+              count
+              percentage
+            }
+            ConceptCounts {
+              concept
+              count
+            }
+            ConceptSnippets
+
+            SentimentCounts {
+              sentiment
+              count
+            }
+            YearCounts {
+              year
+              count
+            }
+          }
+        }
+      `;
+
+      try {
+        const response = await fetch(getGraphQLEndpoint(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query,
+            variables: { words: parsedWords }
+          }),
+        });
+
+        const result = await response.json();
+        if (result.errors && result.errors.length) {
+          throw new Error(result.errors[0].message);
+        }
+        this.setResults(result.data?.wordCounts || []);
+      } catch (error) {
+        console.error('Error fetching word counts:', error);
+        this.errorMessage = error.message || 'Failed to fetch word statistics.';
+        this.setResults([]);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+  },
 });

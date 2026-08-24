@@ -17,6 +17,8 @@ services:
     build: 
       context: ./backend
     container_name: aestheticbackend
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
     depends_on:
       - mongodb
     labels:
@@ -24,6 +26,7 @@ services:
       - "traefik.http.routers.backend.rule=Host(`130.238.146.150`) && PathPrefix(`/api`)"  # Use 130.238.146.150 or IP
       - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
+
 
   mongodb:
     image: mongo:8
