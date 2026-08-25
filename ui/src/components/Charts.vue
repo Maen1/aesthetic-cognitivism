@@ -101,13 +101,15 @@ const renderCharts = () => {
   const all_years = new Set();
   currentResults.forEach((result) => {
     (result.YearCounts || []).forEach((item) => {
-      if (item.year) all_years.add(item.year);
+      if (item.year && item.year >= 1700 && item.year <= 2030) {
+        all_years.add(item.year);
+      }
     });
   });
 
   const line_labels = all_years.size
     ? Array.from(all_years).sort((a, b) => a - b)
-    : [1985, 1990, 1995, 2000];
+    : [1800, 1850, 1900, 1950, 2000];
 
   const line_datasets = currentResults.length
     ? currentResults.map((result, index) => ({
@@ -124,7 +126,7 @@ const renderCharts = () => {
     : [
         {
           label: 'Sample: beautiful',
-          data: [12, 19, 35, 28],
+          data: [12, 19, 35, 28, 45],
           borderColor: 'rgb(59, 130, 246)',
           backgroundColor: 'rgba(59, 130, 246, 0.2)',
           tension: 0.2,
@@ -137,10 +139,38 @@ const renderCharts = () => {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: 'top' } },
-      scales: { y: { beginAtZero: true } }
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          callbacks: {
+            title: (items) => `Year: ${items[0]?.label || ''}`,
+            label: (item) => ` #${item.dataset.label}: ${item.formattedValue} mentions`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 14,
+            maxRotation: 0
+          },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0
+          }
+        }
+      }
     }
   });
+
 
   // 2. Bar Chart: 9 Primary Canonical Categories
   const category_labels = [

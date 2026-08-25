@@ -1,18 +1,60 @@
 #!/usr/bin/env python3
 """
 create_indexes.py
-High-performance MongoDB index and canonical field backfill utility.
-Optimizes query performance for low-resource servers (e.g., 2 vCPUs, 4GB RAM).
-Runs in seconds on an existing database without re-ingesting raw data.
+High-performance MongoDB index, canonical category/sentiment backfill,
+and historical date repair utility for Aesthetic Cognitivism.
+Optimizes query performance and fixes Year timeline values on low-resource servers (e.g. 2 vCPUs, 4GB RAM).
+Runs in ~20-30 seconds on an existing database without re-ingesting raw data.
 """
 
 import os
 import sys
 import time
+import re
+from datetime import datetime, timezone
+from collections import defaultdict
 from pymongo import MongoClient, UpdateOne, ASCENDING, DESCENDING, TEXT
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = os.getenv("MONGO_DB", "aestheticv3")
+
+
+def parse_date_info(raw_date):
+    """
+    Safely parse date into epoch ms (float), formatted ISO string, and integer year.
+    All numeric timestamps in Gale archive datasets are in milliseconds.
+    """
+    if raw_date is None or raw_date == "" or str(raw_date).lower() == "nan":
+        return None, None, None
+
+    # Case 1: Numeric epoch (milliseconds)
+    if isinstance(raw_date, (int, float)):
+        try:
+            val = float(raw_date)
+            ts_sec = val / 1000.0
+            dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+            return int(val), dt.strftime("%Y-%m-%d"), dt.year
+        except Exception:
+            return raw_date, None, None
+
+    # Case 2: Numeric string
+    date_str = str(raw_date).strip()
+    if date_str.lstrip('-').replace('.', '', 1).isdigit():
+        try:
+            val = float(date_str)
+            ts_sec = val / 1000.0
+            dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+            return int(val), dt.strftime("%Y-%m-%d"), dt.year
+        except Exception:
+            pass
+
+    # Case 3: 4-digit year pattern
+    year = None
+    yr_match = re.search(r'\b(17|18|19|20)\d{2}\b', date_str)
+    if yr_match:
+        year = int(yr_match.group(0))
+
+    return None, date_str, year
 
 
 def map_to_primary_category(cat: str) -> str:
@@ -61,31 +103,57 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
     total_docs = col.estimated_document_count()
     print(f"Found {total_docs:,} criticism records.")
 
-    # 1. Check if PrimaryCategory / PrimarySentiment are backfilled
-    sample = col.find_one({"PrimaryCategory": {"$exists": True}})
-    if not sample and total_docs > 0:
-        print("Backfilling PrimaryCategory and PrimarySentiment across documents...")
-        t0 = time.time()
-        batch = []
-        updated = 0
-        for doc in col.find({}, {"_id": 1, "Category": 1, "Sentiment": 1}):
-            p_cat = map_to_primary_category(doc.get("Category"))
-            p_sent = map_to_primary_sentiment(doc.get("Sentiment"))
-            batch.append(UpdateOne({"_id": doc["_id"]}, {"$set": {"PrimaryCategory": p_cat, "PrimarySentiment": p_sent}}))
-            if len(batch) >= 10000:
-                col.bulk_write(batch, ordered=False)
-                updated += len(batch)
-                print(f"  Backfilled {updated:,} / {total_docs:,} records...")
-                batch = []
-        if batch:
+    # 1. Backfill and Repair Date / Canonical Fields in Criticism
+    print("Verifying and repairing Date, PrimaryCategory, and PrimarySentiment fields...")
+    t0 = time.time()
+    batch = []
+    updated = 0
+    for doc in col.find({}, {"_id": 1, "Date": 1, "Category": 1, "Sentiment": 1}):
+        epoch, dt_str, yr = parse_date_info(doc.get("Date"))
+        p_cat = map_to_primary_category(doc.get("Category"))
+        p_sent = map_to_primary_sentiment(doc.get("Sentiment"))
+        
+        batch.append(UpdateOne(
+            {"_id": doc["_id"]},
+            {"$set": {
+                "DateEpoch": epoch,
+                "DateStr": dt_str,
+                "Year": yr,
+                "PrimaryCategory": p_cat,
+                "PrimarySentiment": p_sent
+            }}
+        ))
+        if len(batch) >= 10000:
             col.bulk_write(batch, ordered=False)
             updated += len(batch)
-        print(f"✅ Backfill completed in {time.time() - t0:.2f}s ({updated:,} records updated).")
-    else:
-        print("✅ PrimaryCategory and PrimarySentiment fields are already present.")
+            print(f"  Processed {updated:,} / {total_docs:,} records...")
+            batch = []
+    if batch:
+        col.bulk_write(batch, ordered=False)
+        updated += len(batch)
+    print(f"✅ Repaired & backfilled {updated:,} records in {time.time() - t0:.2f}s.")
 
-    # 2. Build high performance compound indexes
-    print("Building high-performance indexes (background=True)...")
+    # 2. Re-aggregate YearCounts for all concept words in word_counts
+    print("Rebuilding timeline YearCounts across all concept words in 'word_counts'...")
+    t0 = time.time()
+    word_year_counts = defaultdict(lambda: defaultdict(int))
+    for doc in col.find({}, {"_id": 1, "Found_Concepts": 1, "Year": 1}):
+        yr = doc.get("Year")
+        if yr is not None and 1700 <= yr <= 2050:
+            yr_str = str(yr)
+            for c in (doc.get("Found_Concepts") or []):
+                word_year_counts[c][yr_str] += 1
+
+    word_batch = []
+    for word, y_counts in word_year_counts.items():
+        word_batch.append(UpdateOne({"_id": word}, {"$set": {"YearCounts": dict(y_counts)}}))
+
+    if word_batch:
+        word_col.bulk_write(word_batch, ordered=False)
+    print(f"✅ Rebuilt timeline YearCounts for {len(word_batch)} words in {time.time() - t0:.2f}s.")
+
+    # 3. Build high performance compound indexes
+    print("Building high-performance compound indexes (background=True)...")
     t0 = time.time()
 
     indexes = [

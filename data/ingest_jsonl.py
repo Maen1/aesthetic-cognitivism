@@ -18,7 +18,7 @@ from collections import defaultdict
 def parse_date_info(raw_date):
     """
     Safely parse date into epoch ms (float), formatted ISO string, and integer year.
-    Handles epoch ms integers/floats, ISO date strings, partial dates, and None.
+    All numeric timestamps in Gale archive datasets are in milliseconds.
     """
     if raw_date is None or raw_date == "" or str(raw_date).lower() == "nan":
         return None, None, None
@@ -26,30 +26,32 @@ def parse_date_info(raw_date):
     # Case 1: Numeric epoch (milliseconds)
     if isinstance(raw_date, (int, float)):
         try:
-            ts_sec = raw_date / 1000.0 if raw_date > 1e11 else float(raw_date)
+            val = float(raw_date)
+            ts_sec = val / 1000.0
             dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
-            return raw_date, dt.strftime("%Y-%m-%d"), dt.year
+            return int(val), dt.strftime("%Y-%m-%d"), dt.year
         except Exception:
             return raw_date, None, None
 
-    # Case 2: String representations
+    # Case 2: Numeric string
     date_str = str(raw_date).strip()
-
-    if date_str.isdigit():
+    if date_str.lstrip('-').replace('.', '', 1).isdigit():
         try:
-            num = int(date_str)
-            ts_sec = num / 1000.0 if num > 1e11 else float(num)
+            val = float(date_str)
+            ts_sec = val / 1000.0
             dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
-            return num, dt.strftime("%Y-%m-%d"), dt.year
+            return int(val), dt.strftime("%Y-%m-%d"), dt.year
         except Exception:
             pass
 
+    # Case 3: 4-digit year pattern
     year = None
     yr_match = re.search(r'\b(17|18|19|20)\d{2}\b', date_str)
     if yr_match:
         year = int(yr_match.group(0))
 
     return None, date_str, year
+
 
 
 def map_to_primary_category(cat: str) -> str:
