@@ -1,3 +1,4 @@
+import asyncio
 import math
 import re
 from typing import List, Optional
@@ -66,6 +67,21 @@ def map_to_primary_category(cat: str) -> str:
         return "Television & Radio"
     return "Multiple / Other"
 
+
+def map_to_primary_sentiment(sent: str) -> str:
+    """
+    Map raw sentiment string to one of the 4 Primary Sentiments.
+    """
+    if not sent:
+        return "Neutral"
+    s = str(sent).strip().lower()
+    if ("pos" in s and "neg" in s) or "mix" in s:
+        return "Mixed"
+    if "pos" in s:
+        return "Positive"
+    if "neg" in s:
+        return "Negative"
+    return "Neutral"
 
 
 def map_category_to_regex(cat: str) -> str:
@@ -218,7 +234,7 @@ class Query:
     @strawberry.field
     async def filter_metadata(self) -> FilterMetadata:
         try:
-            total = await criticism_collection.count_documents({})
+            total = await criticism_collection.estimated_document_count()
             return FilterMetadata(
                 categories=PRIMARY_CATEGORIES,
                 sentiments=PRIMARY_SENTIMENTS,
@@ -245,15 +261,33 @@ class Query:
         filter_clauses = []
 
         if category and category.strip() and category.strip().lower() != "all":
-            cat_regex = map_category_to_regex(category.strip())
-            filter_clauses.append({"Category": {"$regex": cat_regex, "$options": "i"}})
+            clean_cat = category.strip()
+            if clean_cat in PRIMARY_CATEGORIES:
+                filter_clauses.append({
+                    "$or": [
+                        {"PrimaryCategory": clean_cat},
+                        {"Category": {"$regex": map_category_to_regex(clean_cat), "$options": "i"}}
+                    ]
+                })
+            else:
+                cat_regex = map_category_to_regex(clean_cat)
+                filter_clauses.append({"Category": {"$regex": cat_regex, "$options": "i"}})
 
         if sentiment and sentiment.strip() and sentiment.strip().lower() != "all":
-            sent_regex = map_sentiment_to_regex(sentiment.strip())
-            filter_clauses.append({"Sentiment": {"$regex": sent_regex, "$options": "i"}})
+            clean_sent = sentiment.strip()
+            if clean_sent in PRIMARY_SENTIMENTS:
+                filter_clauses.append({
+                    "$or": [
+                        {"PrimarySentiment": clean_sent},
+                        {"Sentiment": {"$regex": map_sentiment_to_regex(clean_sent), "$options": "i"}}
+                    ]
+                })
+            else:
+                sent_regex = map_sentiment_to_regex(clean_sent)
+                filter_clauses.append({"Sentiment": {"$regex": sent_regex, "$options": "i"}})
 
         if author and author.strip():
-            filter_clauses.append({"Author": {"$regex": re.escape(author.strip()), "$options": "i"}})
+            filter_clauses.append({"Author": {"$regex": f"^{re.escape(author.strip())}", "$options": "i"}})
 
         if artist and artist.strip():
             art_pattern = re.escape(artist.strip())
@@ -270,24 +304,28 @@ class Query:
             })
 
         if query and query.strip():
-            q_pattern = re.escape(query.strip())
-            filter_clauses.append({
-                "$or": [
-                    {"Title": {"$regex": q_pattern, "$options": "i"}},
-                    {"Summary": {"$regex": q_pattern, "$options": "i"}},
-                    {"Full_text": {"$regex": q_pattern, "$options": "i"}},
-                    {"Author": {"$regex": q_pattern, "$options": "i"}}
-                ]
-            })
+            q_clean = query.strip()
+            filter_clauses.append({"$text": {"$search": q_clean}})
 
         mongo_filter = {"$and": filter_clauses} if filter_clauses else {}
-
-        total = await criticism_collection.count_documents(mongo_filter)
-        total_pages = max(1, math.ceil(total / page_size)) if total > 0 else 1
         skip = (page - 1) * page_size
 
-        cursor = criticism_collection.find(mongo_filter).sort([("DateEpoch", -1), ("_id", -1)]).skip(skip).limit(page_size)
-        raw_docs = await cursor.to_list(length=page_size)
+        # Fast parallel execution: count + find
+        if not mongo_filter:
+            count_task = criticism_collection.estimated_document_count()
+        else:
+            count_task = criticism_collection.count_documents(mongo_filter)
+
+        find_task = (
+            criticism_collection.find(mongo_filter)
+            .sort([("DateEpoch", -1), ("_id", -1)])
+            .skip(skip)
+            .limit(page_size)
+            .to_list(length=page_size)
+        )
+
+        total, raw_docs = await asyncio.gather(count_task, find_task)
+        total_pages = max(1, math.ceil(total / page_size)) if total > 0 else 1
 
         items = [map_to_criticism(d) for d in raw_docs]
         return CriticismSearchResult(
@@ -305,7 +343,7 @@ class Query:
 
     @strawberry.field
     async def total_count(self) -> int:
-        return await criticism_collection.count_documents({})
+        return await criticism_collection.estimated_document_count()
 
     @strawberry.field
     async def word_counts(self, words: List[str]) -> List[WordCount]:
@@ -371,8 +409,6 @@ class Query:
                 CountByConcept(concept=str(c), count=float(count))
                 for c, count in (result.get("ConceptCounts") or {}).items()
             ]
-
-
 
             raw_word_concept = result.get("WordConcept")
             word_concept_list = (

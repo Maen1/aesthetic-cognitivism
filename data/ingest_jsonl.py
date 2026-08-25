@@ -3,7 +3,7 @@
 ingest_jsonl.py
 Streaming JSONL ingestion and aggregation pipeline for Aesthetic Cognitivism.
 Processes raw criticism JSONL datasets into MongoDB 'criticism' and 'word_counts' collections.
-Designed for high throughput with constant low memory usage.
+Designed for high throughput with constant low memory usage and high-performance compound indexing.
 """
 
 import os
@@ -26,7 +26,6 @@ def parse_date_info(raw_date):
     # Case 1: Numeric epoch (milliseconds)
     if isinstance(raw_date, (int, float)):
         try:
-            # Check if timestamp in ms (> 1e11) or seconds (< 1e11)
             ts_sec = raw_date / 1000.0 if raw_date > 1e11 else float(raw_date)
             dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
             return raw_date, dt.strftime("%Y-%m-%d"), dt.year
@@ -36,7 +35,6 @@ def parse_date_info(raw_date):
     # Case 2: String representations
     date_str = str(raw_date).strip()
 
-    # Try parsing numeric string
     if date_str.isdigit():
         try:
             num = int(date_str)
@@ -46,13 +44,54 @@ def parse_date_info(raw_date):
         except Exception:
             pass
 
-    # Extract 4-digit year if present
     year = None
     yr_match = re.search(r'\b(17|18|19|20)\d{2}\b', date_str)
     if yr_match:
         year = int(yr_match.group(0))
 
     return None, date_str, year
+
+
+def map_to_primary_category(cat: str) -> str:
+    """
+    Map raw category string to one of the 9 Primary Canonical Categories.
+    """
+    if not cat:
+        return "Multiple / Other"
+    c = str(cat).strip().lower()
+    if "theater" in c or "theatre" in c or "drama" in c or "play" in c:
+        return "Theater & Drama"
+    if "concert" in c or "music" in c or "rock" in c or "jazz" in c or "orchestra" in c or "band" in c or "cabaret" in c:
+        return "Concerts & Music"
+    if "art" in c or "exhibit" in c or "museum" in c or "gallery" in c or "sculpture" in c or "paint" in c:
+        return "Art & Exhibitions"
+    if "film" in c or "movie" in c or "cinema" in c:
+        return "Films & Cinema"
+    if "opera" in c or "operetta" in c:
+        return "Opera"
+    if "dance" in c or "ballet" in c:
+        return "Dance & Ballet"
+    if "poet" in c or "lit" in c or "book" in c or "novel" in c or "fiction" in c:
+        return "Poetry & Literature"
+    if "tv" in c or "tele" in c or "radio" in c or "broadcast" in c:
+        return "Television & Radio"
+    return "Multiple / Other"
+
+
+def map_to_primary_sentiment(sent: str) -> str:
+    """
+    Map raw sentiment string to one of the 4 Primary Sentiments.
+    """
+    if not sent:
+        return "Neutral"
+    s = str(sent).strip().lower()
+    if ("pos" in s and "neg" in s) or "mix" in s:
+        return "Mixed"
+    if "pos" in s:
+        return "Positive"
+    if "neg" in s:
+        return "Negative"
+    return "Neutral"
 
 
 def normalize_criticism_record(raw_dict):
@@ -81,9 +120,11 @@ def normalize_criticism_record(raw_dict):
 
     category = raw_dict.get("Category")
     cat_str = str(category).strip() if category and str(category).lower() not in {"nan", "none", "null"} else "Uncategorized"
+    primary_category = map_to_primary_category(cat_str)
 
     sentiment = raw_dict.get("Sentiment")
     sent_str = str(sentiment).strip().capitalize() if sentiment and str(sentiment).lower() not in {"nan", "none", "null"} else "Neutral"
+    primary_sentiment = map_to_primary_sentiment(sent_str)
 
     summary = raw_dict.get("Summary") or raw_dict.get("summary")
     sum_str = str(summary).strip() if summary and str(summary).lower() not in {"nan", "none", "null"} else ""
@@ -138,13 +179,82 @@ def normalize_criticism_record(raw_dict):
         "extracted_text": str(extracted_text),
         "URL": str(url) if url else None,
         "Category": cat_str,
+        "PrimaryCategory": primary_category,
         "Sentiment": sent_str,
+        "PrimarySentiment": primary_sentiment,
         "Summary": sum_str,
         "LLM_Artists_Percentages": artist_percentages,
         "ArtistsList": artists_list,
         "Found_Concepts": found_concepts,
         "Concept_Snippets": concept_snippets
     }
+
+
+def update_word_aggregates(doc, total_counts, year_counts, category_counts, sentiment_counts, artist_counts, artist_snippets, concept_snippets_agg):
+    """
+    Update running aggregation dictionaries for a single document.
+    """
+    concepts = doc.get("Found_Concepts") or []
+    doc_category = doc.get("PrimaryCategory") or map_to_primary_category(doc.get("Category"))
+    sentiment = doc.get("PrimarySentiment") or map_to_primary_sentiment(doc.get("Sentiment"))
+    year_val = str(doc.get("Year") or "Unknown")
+    artists = doc.get("ArtistsList") or []
+    snippets_dict = doc.get("Concept_Snippets") or {}
+
+    for word in concepts:
+        total_counts[word] += 1
+        year_counts[word][year_val] += 1
+        category_counts[word][doc_category] += 1
+        sentiment_counts[word][sentiment] += 1
+
+        for artist in artists:
+            artist_counts[word][artist] += 1
+
+        word_snippets = snippets_dict.get(word, [])
+        if word_snippets:
+            if len(concept_snippets_agg[word]) < 50:
+                concept_snippets_agg[word].extend(word_snippets[:3])
+
+            for artist in artists:
+                if len(artist_snippets[word][artist]) < 15:
+                    artist_snippets[word][artist].extend(word_snippets[:2])
+
+
+def build_word_count_records(total_counts, year_counts, category_counts, sentiment_counts, artist_counts, artist_snippets, concept_snippets_agg):
+    """
+    Format running aggregation dictionaries into MongoDB word_count documents.
+    Safely limits top artists and snippets to avoid BSON document size limits.
+    """
+    results = []
+    for word, total in total_counts.items():
+        if total == 0:
+            continue
+
+        def to_percent(d, count_total):
+            return {k: round((v / count_total) * 100, 2) for k, v in d.items()}
+
+        sorted_artists = sorted(artist_counts[word].items(), key=lambda x: x[1], reverse=True)
+        top_artists_dict = dict(sorted_artists[:300])
+
+        pruned_snippets = {}
+        for artist in top_artists_dict:
+            if artist in artist_snippets[word]:
+                unique_snips = list(dict.fromkeys(artist_snippets[word][artist]))[:3]
+                if unique_snips:
+                    pruned_snippets[artist] = unique_snips
+
+        results.append({
+            "_id": word,
+            "Word": word,
+            "TotalCount": total,
+            "YearCounts": dict(year_counts[word]),
+            "CategoryCounts": to_percent(category_counts[word], total),
+            "SentimentCounts": to_percent(sentiment_counts[word], total),
+            "ArtistCounts": top_artists_dict,
+            "ArtistSnippets": pruned_snippets,
+            "ConceptSnippets": list(dict.fromkeys(concept_snippets_agg[word]))[:50]
+        })
+    return results
 
 
 def aggregate_word_data(documents):
@@ -182,105 +292,9 @@ def aggregate_word_data(documents):
     )
 
 
-def map_to_primary_category(cat: str) -> str:
-    if not cat:
-        return "Multiple / Other"
-    c = str(cat).strip().lower()
-    if "theater" in c or "theatre" in c or "drama" in c or "play" in c:
-        return "Theater & Drama"
-    if "concert" in c or "music" in c or "rock" in c or "jazz" in c or "orchestra" in c or "band" in c or "cabaret" in c:
-        return "Concerts & Music"
-    if "art" in c or "exhibit" in c or "museum" in c or "gallery" in c or "sculpture" in c or "paint" in c:
-        return "Art & Exhibitions"
-    if "film" in c or "movie" in c or "cinema" in c:
-        return "Films & Cinema"
-    if "opera" in c or "operetta" in c:
-        return "Opera"
-    if "dance" in c or "ballet" in c:
-        return "Dance & Ballet"
-    if "poet" in c or "lit" in c or "book" in c or "novel" in c or "fiction" in c:
-        return "Poetry & Literature"
-    if "tv" in c or "tele" in c or "radio" in c or "broadcast" in c:
-        return "Television & Radio"
-    return "Multiple / Other"
-
-
-def update_word_aggregates(doc, total_counts, year_counts, category_counts, sentiment_counts, artist_counts, artist_snippets, concept_snippets_agg):
-    """
-    Update running aggregation dictionaries for a single document.
-    """
-    concepts = doc.get("Found_Concepts") or []
-    raw_cat = doc.get("Category", "Uncategorized")
-    doc_category = map_to_primary_category(raw_cat)
-    sentiment = doc.get("Sentiment", "Neutral")
-    year_val = str(doc.get("Year") or "Unknown")
-    artists = doc.get("ArtistsList") or []
-    snippets_dict = doc.get("Concept_Snippets") or {}
-
-    for word in concepts:
-        total_counts[word] += 1
-        year_counts[word][year_val] += 1
-        category_counts[word][doc_category] += 1
-        sentiment_counts[word][sentiment] += 1
-
-
-        for artist in artists:
-            artist_counts[word][artist] += 1
-
-        word_snippets = snippets_dict.get(word, [])
-        if word_snippets:
-            if len(concept_snippets_agg[word]) < 50:
-                concept_snippets_agg[word].extend(word_snippets[:3])
-
-            for artist in artists:
-                if len(artist_snippets[word][artist]) < 15:
-                    artist_snippets[word][artist].extend(word_snippets[:2])
-
-
-def build_word_count_records(total_counts, year_counts, category_counts, sentiment_counts, artist_counts, artist_snippets, concept_snippets_agg):
-    """
-    Format running aggregation dictionaries into MongoDB word_count documents.
-    Safely limits top artists and snippets to avoid BSON document size limits.
-    """
-    results = []
-    for word, total in total_counts.items():
-        if total == 0:
-            continue
-
-        def to_percent(d, count_total):
-            return {k: round((v / count_total) * 100, 2) for k, v in d.items()}
-
-        # Keep top 300 artists by mention count
-        sorted_artists = sorted(artist_counts[word].items(), key=lambda x: x[1], reverse=True)
-        top_artists_dict = dict(sorted_artists[:300])
-        top_artist_names = set(top_artists_dict.keys())
-
-        # Keep snippets only for top artists (max 3 snippets each)
-        pruned_snippets = {}
-        for artist in top_artists_dict:
-            if artist in artist_snippets[word]:
-                unique_snips = list(dict.fromkeys(artist_snippets[word][artist]))[:3]
-                if unique_snips:
-                    pruned_snippets[artist] = unique_snips
-
-        results.append({
-            "_id": word,
-            "Word": word,
-            "TotalCount": total,
-            "YearCounts": dict(year_counts[word]),
-            "CategoryCounts": to_percent(category_counts[word], total),
-            "SentimentCounts": to_percent(sentiment_counts[word], total),
-            "ArtistCounts": top_artists_dict,
-            "ArtistSnippets": pruned_snippets,
-            "ConceptSnippets": list(dict.fromkeys(concept_snippets_agg[word]))[:50]
-        })
-    return results
-
-
-
 def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aestheticv3", batch_size=5000, drop_first=False):
     """
-    Stream and ingest JSONL file into MongoDB with constant low memory usage.
+    Stream and ingest JSONL file into MongoDB with constant low memory usage and high-performance indexes.
     """
     try:
         from pymongo import MongoClient, ReplaceOne, ASCENDING, DESCENDING, TEXT
@@ -305,7 +319,6 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     criticism_batch = []
     total_records = 0
 
-    # Running aggregation state
     total_counts = defaultdict(int)
     year_counts = defaultdict(lambda: defaultdict(int))
     category_counts = defaultdict(lambda: defaultdict(int))
@@ -330,7 +343,6 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
                     ReplaceOne({"_id": normalized["_id"]}, normalized, upsert=True)
                 )
 
-                # Update on-the-fly aggregation
                 update_word_aggregates(
                     normalized,
                     total_counts,
@@ -370,12 +382,15 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
         word_col.delete_many({})
         word_col.insert_many(word_aggregates)
 
-    print("Building MongoDB indexes...")
-    criticism_col.create_index([("Category", ASCENDING), ("Sentiment", ASCENDING), ("DateEpoch", DESCENDING)])
-    criticism_col.create_index([("Found_Concepts", ASCENDING)])
-    criticism_col.create_index([("ArtistsList", ASCENDING)])
-    criticism_col.create_index([("Author", ASCENDING)])
-    criticism_col.create_index([("Year", ASCENDING)])
+    print("Building optimized compound MongoDB indexes for low-resource environments...")
+    criticism_col.create_index([("DateEpoch", DESCENDING), ("_id", DESCENDING)])
+    criticism_col.create_index([("PrimaryCategory", ASCENDING), ("DateEpoch", DESCENDING)])
+    criticism_col.create_index([("PrimaryCategory", ASCENDING), ("PrimarySentiment", ASCENDING), ("DateEpoch", DESCENDING)])
+    criticism_col.create_index([("PrimarySentiment", ASCENDING), ("DateEpoch", DESCENDING)])
+    criticism_col.create_index([("Found_Concepts", ASCENDING), ("DateEpoch", DESCENDING)])
+    criticism_col.create_index([("ArtistsList", ASCENDING), ("DateEpoch", DESCENDING)])
+    criticism_col.create_index([("Author", ASCENDING), ("DateEpoch", DESCENDING)])
+    criticism_col.create_index([("Year", ASCENDING), ("DateEpoch", DESCENDING)])
     criticism_col.create_index([
         ("Title", TEXT),
         ("Summary", TEXT),
@@ -384,7 +399,6 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     ], name="criticism_text_search")
 
     word_col.create_index([("Word", ASCENDING)], unique=True)
-
 
     print(f"✅ Ingestion complete! {total_records} criticisms and {len(word_aggregates)} words stored.")
     return total_records, len(word_aggregates)
@@ -395,7 +409,7 @@ def main():
     parser.add_argument("--input", "-i", required=True, help="Path to input .jsonl file")
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URL", "mongodb://localhost:27017"), help="MongoDB connection URI")
     parser.add_argument("--db", default="aestheticv3", help="MongoDB database name")
-    parser.add_argument("--batch-size", type=int, default=5000, help="Batch size for bulk operations")
+    parser.add_argument("--batch-size", type=int, default=10000, help="Batch size for bulk operations")
     parser.add_argument("--drop", action="store_true", help="Drop existing collections before ingestion")
 
     args = parser.parse_args()
