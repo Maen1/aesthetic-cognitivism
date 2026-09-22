@@ -64,12 +64,17 @@ class CountByArtist:
 class CountByYear:
     year: Optional[int]
     count: float
+    normalized_count: Optional[float] = None
+    total_records: Optional[int] = None
 
 
 @strawberry.type
 class CountByCategory:
     category: Optional[str]
     count: float
+    raw_count: Optional[float] = None
+    normalized_count: Optional[float] = None
+    total_records: Optional[int] = None
 
 
 @strawberry.type
@@ -82,6 +87,9 @@ class CountByConcept:
 class CountBySentiment:
     sentiment: Optional[str]
     count: float
+    raw_count: Optional[float] = None
+    normalized_count: Optional[float] = None
+    total_records: Optional[int] = None
 
 
 @strawberry.type

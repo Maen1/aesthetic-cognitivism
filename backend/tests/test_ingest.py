@@ -116,6 +116,14 @@ class TestIngestPipeline(unittest.TestCase):
         self.assertEqual(beautiful["ArtistCounts"]["Harriet Walter"], 1)
         self.assertIn("A beautiful line", beautiful["ConceptSnippets"])
 
+        # Normalized per 100 records assertions
+        self.assertEqual(beautiful["YearCountsNormalized"]["1995"], 100.0)
+        self.assertEqual(beautiful["CategoryCountsRaw"]["Concerts & Music"], 1)
+        self.assertEqual(beautiful["CategoryCountsNormalized"]["Concerts & Music"], 100.0)
+        self.assertEqual(beautiful["SentimentCountsRaw"]["Positive"], 1)
+        self.assertEqual(beautiful["SentimentCountsNormalized"]["Positive"], 100.0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

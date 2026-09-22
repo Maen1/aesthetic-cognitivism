@@ -18,6 +18,9 @@ class TestGraphQLSchema(unittest.TestCase):
         self.assertIn("wordCounts", sdl)
         self.assertIn("ArtistPercentage", sdl)
         self.assertIn("ConceptSnippet", sdl)
+        self.assertIn("normalizedCount", sdl)
+        self.assertIn("rawCount", sdl)
+        self.assertIn("totalRecords", sdl)
 
     def test_map_to_criticism_full(self):
         doc = {

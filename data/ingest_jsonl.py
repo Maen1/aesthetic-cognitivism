@@ -222,11 +222,16 @@ def update_word_aggregates(doc, total_counts, year_counts, category_counts, sent
                     artist_snippets[word][artist].extend(word_snippets[:2])
 
 
-def build_word_count_records(total_counts, year_counts, category_counts, sentiment_counts, artist_counts, artist_snippets, concept_snippets_agg):
+def build_word_count_records(total_counts, year_counts, category_counts, sentiment_counts, artist_counts, artist_snippets, concept_snippets_agg, corpus_totals=None):
     """
     Format running aggregation dictionaries into MongoDB word_count documents.
     Safely limits top artists and snippets to avoid BSON document size limits.
     """
+    corpus_totals = corpus_totals or {}
+    c_years = corpus_totals.get("years", {})
+    c_cats = corpus_totals.get("categories", {})
+    c_sents = corpus_totals.get("sentiments", {})
+
     results = []
     for word, total in total_counts.items():
         if total == 0:
@@ -245,13 +250,34 @@ def build_word_count_records(total_counts, year_counts, category_counts, sentime
                 if unique_snips:
                     pruned_snippets[artist] = unique_snips
 
+        y_raw = dict(year_counts[word])
+        y_norm = {
+            yr: round((cnt / c_years[yr]) * 100, 3)
+            for yr, cnt in y_raw.items() if c_years.get(yr, 0) > 0
+        }
+        cat_raw = dict(category_counts[word])
+        cat_norm = {
+            cat: round((cnt / c_cats[cat]) * 100, 3)
+            for cat, cnt in cat_raw.items() if c_cats.get(cat, 0) > 0
+        }
+        sent_raw = dict(sentiment_counts[word])
+        sent_norm = {
+            sent: round((cnt / c_sents[sent]) * 100, 3)
+            for sent, cnt in sent_raw.items() if c_sents.get(sent, 0) > 0
+        }
+
         results.append({
             "_id": word,
             "Word": word,
             "TotalCount": total,
-            "YearCounts": dict(year_counts[word]),
+            "YearCounts": y_raw,
+            "YearCountsNormalized": y_norm,
             "CategoryCounts": to_percent(category_counts[word], total),
+            "CategoryCountsRaw": cat_raw,
+            "CategoryCountsNormalized": cat_norm,
             "SentimentCounts": to_percent(sentiment_counts[word], total),
+            "SentimentCountsRaw": sent_raw,
+            "SentimentCountsNormalized": sent_norm,
             "ArtistCounts": top_artists_dict,
             "ArtistSnippets": pruned_snippets,
             "ConceptSnippets": list(dict.fromkeys(concept_snippets_agg[word]))[:50]
@@ -271,6 +297,10 @@ def aggregate_word_data(documents):
     artist_snippets = defaultdict(lambda: defaultdict(list))
     concept_snippets_agg = defaultdict(list)
 
+    corpus_years = defaultdict(int)
+    corpus_categories = defaultdict(int)
+    corpus_sentiments = defaultdict(int)
+
     for doc in documents:
         update_word_aggregates(
             doc,
@@ -282,6 +312,14 @@ def aggregate_word_data(documents):
             artist_snippets,
             concept_snippets_agg
         )
+        yr = str(doc.get("Year") or "Unknown")
+        cat = doc.get("PrimaryCategory") or map_to_primary_category(doc.get("Category"))
+        sent = doc.get("PrimarySentiment") or map_to_primary_sentiment(doc.get("Sentiment"))
+        corpus_years[yr] += 1
+        if cat:
+            corpus_categories[cat] += 1
+        if sent:
+            corpus_sentiments[sent] += 1
 
     return build_word_count_records(
         total_counts,
@@ -290,7 +328,12 @@ def aggregate_word_data(documents):
         sentiment_counts,
         artist_counts,
         artist_snippets,
-        concept_snippets_agg
+        concept_snippets_agg,
+        corpus_totals={
+            "years": corpus_years,
+            "categories": corpus_categories,
+            "sentiments": corpus_sentiments
+        }
     )
 
 
@@ -329,6 +372,10 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     artist_snippets = defaultdict(lambda: defaultdict(list))
     concept_snippets_agg = defaultdict(list)
 
+    corpus_years = defaultdict(int)
+    corpus_categories = defaultdict(int)
+    corpus_sentiments = defaultdict(int)
+
     with open(input_file, "r", encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
             line = line.strip()
@@ -356,6 +403,15 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
                     concept_snippets_agg
                 )
 
+                yr = str(normalized.get("Year") or "Unknown")
+                cat = normalized.get("PrimaryCategory")
+                sent = normalized.get("PrimarySentiment")
+                corpus_years[yr] += 1
+                if cat:
+                    corpus_categories[cat] += 1
+                if sent:
+                    corpus_sentiments[sent] += 1
+
                 total_records += 1
 
                 if len(criticism_batch) >= batch_size:
@@ -369,6 +425,21 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
         criticism_col.bulk_write(criticism_batch, ordered=False)
         print(f"  Processed final batch ({total_records} total criticism records).")
 
+    # Save corpus metadata
+    meta_col = db["corpus_metadata"]
+    meta_col.replace_one(
+        {"_id": "corpus_totals"},
+        {
+            "_id": "corpus_totals",
+            "total_criticisms": total_records,
+            "records_by_year": dict(corpus_years),
+            "records_by_category": dict(corpus_categories),
+            "records_by_sentiment": dict(corpus_sentiments),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        },
+        upsert=True
+    )
+
     print("Building pre-aggregated word statistics...")
     word_aggregates = build_word_count_records(
         total_counts,
@@ -377,7 +448,12 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
         sentiment_counts,
         artist_counts,
         artist_snippets,
-        concept_snippets_agg
+        concept_snippets_agg,
+        corpus_totals={
+            "years": corpus_years,
+            "categories": corpus_categories,
+            "sentiments": corpus_sentiments
+        }
     )
     print(f"Inserting/updating {len(word_aggregates)} concept word records into 'word_counts'...")
     if word_aggregates:

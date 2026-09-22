@@ -92,13 +92,24 @@ const activeConceptRecord = computed(() => {
   return results.value.find((r) => r.Word === activeConceptSnippetTab.value) || results.value[0];
 });
 
+const isNormalized = computed(() => store.getMetricMode === 'normalized');
+
 // Chart Data Builders
 const getTimelineData = (currentResults) => {
+  const isNorm = store.getMetricMode === 'normalized';
   const all_years = new Set();
+  const yearMetaMap = {};
+
   currentResults.forEach((result) => {
+    yearMetaMap[result.Word] = {};
     (result.YearCounts || []).forEach((item) => {
       if (item.year && item.year >= 1700 && item.year <= 2030) {
         all_years.add(item.year);
+        yearMetaMap[result.Word][item.year] = {
+          raw: item.count || 0,
+          normalized: item.normalizedCount ?? 0,
+          totalRecords: item.totalRecords ?? null
+        };
       }
     });
   });
@@ -111,8 +122,9 @@ const getTimelineData = (currentResults) => {
     ? currentResults.map((result, index) => ({
         label: result.Word,
         data: line_labels.map((year) => {
-          const entry = (result.YearCounts || []).find((item) => item.year === year);
-          return entry ? entry.count : 0;
+          const meta = yearMetaMap[result.Word]?.[year];
+          if (!meta) return 0;
+          return isNorm ? meta.normalized : meta.raw;
         }),
         fill: false,
         borderColor: getRandomColor(index),
@@ -122,17 +134,18 @@ const getTimelineData = (currentResults) => {
     : [
         {
           label: 'Sample: beautiful',
-          data: [12, 19, 35, 28, 45],
+          data: isNorm ? [1.2, 1.8, 3.2, 2.5, 4.1] : [12, 19, 35, 28, 45],
           borderColor: 'rgb(59, 130, 246)',
           backgroundColor: 'rgba(59, 130, 246, 0.2)',
           tension: 0.2,
         }
       ];
 
-  return { labels: line_labels, datasets: line_datasets };
+  return { labels: line_labels, datasets: line_datasets, yearMetaMap };
 };
 
 const getCategoryData = (currentResults) => {
+  const isNorm = store.getMetricMode === 'normalized';
   const category_labels = [
     'Theater & Drama',
     'Concerts & Music',
@@ -144,13 +157,27 @@ const getCategoryData = (currentResults) => {
     'Television & Radio',
     'Multiple / Other'
   ];
+  const catMetaMap = {};
+
+  currentResults.forEach((result) => {
+    catMetaMap[result.Word] = {};
+    (result.CategoryCounts || []).forEach((item) => {
+      catMetaMap[result.Word][item.category] = {
+        pctShare: item.count || 0,
+        raw: item.rawCount ?? 0,
+        normalized: item.normalizedCount ?? 0,
+        totalRecords: item.totalRecords ?? null
+      };
+    });
+  });
 
   const category_datasets = currentResults.length
     ? currentResults.map((result, index) => ({
         label: result.Word,
         data: category_labels.map((category) => {
-          const entry = (result.CategoryCounts || []).find((item) => item.category === category);
-          return entry ? entry.count : 0;
+          const meta = catMetaMap[result.Word]?.[category];
+          if (!meta) return 0;
+          return isNorm ? meta.normalized : meta.pctShare;
         }),
         borderColor: getRandomColor(index),
         backgroundColor: getRandomColor(index, 0.65),
@@ -159,24 +186,42 @@ const getCategoryData = (currentResults) => {
     : [
         {
           label: 'Sample: beautiful',
-          data: [12.79, 37.13, 17.16, 5.87, 9.77, 3.46, 6.45, 1.22, 5.37],
+          data: isNorm
+            ? [1.1, 4.5, 1.5, 0.8, 2.8, 1.5, 1.8, 1.5, 1.7]
+            : [12.79, 37.13, 17.16, 5.87, 9.77, 3.46, 6.45, 1.22, 5.37],
           backgroundColor: 'rgba(59, 130, 246, 0.65)',
           borderColor: 'rgb(59, 130, 246)',
           borderWidth: 1,
         }
       ];
 
-  return { labels: category_labels, datasets: category_datasets };
+  return { labels: category_labels, datasets: category_datasets, catMetaMap };
 };
 
 const getSentimentData = (currentResults) => {
+  const isNorm = store.getMetricMode === 'normalized';
   const all_sentiments = ['Positive', 'Neutral', 'Negative', 'Mixed'];
+  const sentMetaMap = {};
+
+  currentResults.forEach((result) => {
+    sentMetaMap[result.Word] = {};
+    (result.SentimentCounts || []).forEach((item) => {
+      sentMetaMap[result.Word][item.sentiment] = {
+        pctShare: item.count || 0,
+        raw: item.rawCount ?? 0,
+        normalized: item.normalizedCount ?? 0,
+        totalRecords: item.totalRecords ?? null
+      };
+    });
+  });
+
   const sentiment_datasets = currentResults.length
     ? currentResults.map((result, index) => ({
         label: result.Word,
         data: all_sentiments.map((sentiment) => {
-          const entry = (result.SentimentCounts || []).find((item) => item.sentiment?.toLowerCase() === sentiment.toLowerCase());
-          return entry ? entry.count : 0;
+          const meta = sentMetaMap[result.Word]?.[sentiment];
+          if (!meta) return 0;
+          return isNorm ? meta.normalized : meta.pctShare;
         }),
         borderColor: getRandomColor(index),
         backgroundColor: getRandomColor(index, 0.65),
@@ -185,15 +230,16 @@ const getSentimentData = (currentResults) => {
     : [
         {
           label: 'Sample: beautiful',
-          data: [65, 25, 8, 2],
+          data: isNorm ? [2.7, 1.7, 1.3, 0.5] : [65, 25, 8, 2],
           backgroundColor: ['rgba(16, 185, 129, 0.65)', 'rgba(100, 116, 139, 0.65)', 'rgba(239, 68, 68, 0.65)', 'rgba(245, 158, 11, 0.65)'],
           borderColor: ['rgb(16, 185, 129)', 'rgb(100, 116, 139)', 'rgb(239, 68, 68)', 'rgb(245, 158, 11)'],
           borderWidth: 1
         }
       ];
 
-  return { labels: all_sentiments, datasets: sentiment_datasets };
+  return { labels: all_sentiments, datasets: sentiment_datasets, sentMetaMap };
 };
+
 
 const getArtistData = (currentResults, maxArtists = 12) => {
   const top_artists_set = new Set();
@@ -267,6 +313,8 @@ const renderCharts = () => {
 
   // 1. Line Chart: Years
   const timelineData = getTimelineData(currentResults);
+  const isNorm = store.getMetricMode === 'normalized';
+
   chart1 = new Chart(ctx1, {
     type: 'line',
     data: timelineData,
@@ -279,7 +327,17 @@ const renderCharts = () => {
         tooltip: {
           callbacks: {
             title: (items) => `Year: ${items[0]?.label || ''}`,
-            label: (item) => ` #${item.dataset.label}: ${item.formattedValue} mentions`
+            label: (item) => {
+              const word = item.dataset.label || '';
+              const yr = item.label;
+              const meta = timelineData.yearMetaMap?.[word]?.[yr];
+              if (isNorm && meta) {
+                const normVal = meta.normalized.toFixed(3).replace(/\.?0+$/, '');
+                const recStr = meta.totalRecords ? ` (${meta.raw} mentions / ${meta.totalRecords.toLocaleString()} records)` : ` (${meta.raw} mentions)`;
+                return ` #${word}: ${normVal} per 100 records${recStr}`;
+              }
+              return ` #${word}: ${item.formattedValue} mentions`;
+            }
           }
         }
       },
@@ -288,7 +346,12 @@ const renderCharts = () => {
           ticks: { autoSkip: true, maxTicksLimit: 14, maxRotation: 0 },
           grid: { display: false }
         },
-        y: { beginAtZero: true, ticks: { precision: 0 } }
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (value) => isNorm ? `${value} / 100 rec` : value
+          }
+        }
       }
     }
   });
@@ -307,6 +370,13 @@ const renderCharts = () => {
           callbacks: {
             label: (item) => {
               const word = item.dataset.label || '';
+              const cat = item.label;
+              const meta = categoryData.catMetaMap?.[word]?.[cat];
+              if (isNorm && meta) {
+                const normVal = meta.normalized.toFixed(3).replace(/\.?0+$/, '');
+                const recStr = meta.totalRecords ? ` (${meta.raw.toLocaleString()} mentions / ${meta.totalRecords.toLocaleString()} records)` : ` (${meta.raw.toLocaleString()} mentions)`;
+                return ` #${word}: ${normVal} per 100 records${recStr}`;
+              }
               const value = item.formattedValue ?? item.raw ?? '';
               return word ? `Word: #${word} - ${value}%` : `${value}%`;
             }
@@ -316,7 +386,7 @@ const renderCharts = () => {
       scales: {
         y: {
           beginAtZero: true,
-          ticks: { callback: (value) => `${value}%` }
+          ticks: { callback: (value) => isNorm ? `${value} / 100 rec` : `${value}%` }
         }
       }
     }
@@ -336,6 +406,13 @@ const renderCharts = () => {
           callbacks: {
             label: (item) => {
               const word = item.dataset.label || '';
+              const sent = item.label;
+              const meta = sentimentData.sentMetaMap?.[word]?.[sent];
+              if (isNorm && meta) {
+                const normVal = meta.normalized.toFixed(3).replace(/\.?0+$/, '');
+                const recStr = meta.totalRecords ? ` (${meta.raw.toLocaleString()} mentions / ${meta.totalRecords.toLocaleString()} records)` : ` (${meta.raw.toLocaleString()} mentions)`;
+                return ` #${word}: ${normVal} per 100 records${recStr}`;
+              }
               const value = item.formattedValue ?? item.raw ?? '';
               return word ? `Word: #${word} - ${value}%` : `${value}%`;
             }
@@ -345,7 +422,7 @@ const renderCharts = () => {
       scales: {
         y: {
           beginAtZero: true,
-          ticks: { callback: (value) => `${value}%` }
+          ticks: { callback: (value) => isNorm ? `${value} / 100 rec` : `${value}%` }
         }
       }
     }
@@ -426,6 +503,7 @@ const renderModalChart = async () => {
   if (!modalCanvas || !expandedChart.value) return;
 
   const currentResults = store.getResults || [];
+  const isNorm = store.getMetricMode === 'normalized';
 
   if (expandedChart.value === 'timeline') {
     const timelineData = getTimelineData(currentResults);
@@ -442,7 +520,17 @@ const renderModalChart = async () => {
             padding: 12,
             callbacks: {
               title: (items) => `Year: ${items[0]?.label || ''}`,
-              label: (item) => ` #${item.dataset.label}: ${item.formattedValue} mentions`
+              label: (item) => {
+                const word = item.dataset.label || '';
+                const yr = item.label;
+                const meta = timelineData.yearMetaMap?.[word]?.[yr];
+                if (isNorm && meta) {
+                  const normVal = meta.normalized.toFixed(3).replace(/\.?0+$/, '');
+                  const recStr = meta.totalRecords ? ` (${meta.raw} mentions / ${meta.totalRecords.toLocaleString()} records)` : ` (${meta.raw} mentions)`;
+                  return ` #${word}: ${normVal} per 100 records${recStr}`;
+                }
+                return ` #${word}: ${item.formattedValue} mentions`;
+              }
             }
           }
         },
@@ -453,7 +541,11 @@ const renderModalChart = async () => {
           },
           y: {
             beginAtZero: true,
-            ticks: { precision: 0, font: { size: 12 } },
+            ticks: {
+              callback: (val) => isNorm ? `${val} / 100 rec` : val,
+              precision: isNorm ? undefined : 0,
+              font: { size: 12 }
+            },
             grid: { color: 'rgba(0, 0, 0, 0.05)' }
           }
         }
@@ -474,6 +566,13 @@ const renderModalChart = async () => {
             callbacks: {
               label: (item) => {
                 const word = item.dataset.label || '';
+                const cat = item.label;
+                const meta = categoryData.catMetaMap?.[word]?.[cat];
+                if (isNorm && meta) {
+                  const normVal = meta.normalized.toFixed(3).replace(/\.?0+$/, '');
+                  const recStr = meta.totalRecords ? ` (${meta.raw.toLocaleString()} mentions / ${meta.totalRecords.toLocaleString()} records)` : ` (${meta.raw.toLocaleString()} mentions)`;
+                  return ` #${word}: ${normVal} per 100 records${recStr}`;
+                }
                 const value = item.formattedValue ?? item.raw ?? '';
                 return word ? `Word: #${word} - ${value}%` : `${value}%`;
               }
@@ -484,7 +583,7 @@ const renderModalChart = async () => {
           x: { ticks: { font: { size: 12, weight: '500' } } },
           y: {
             beginAtZero: true,
-            ticks: { callback: (val) => `${val}%`, font: { size: 12 } }
+            ticks: { callback: (val) => isNorm ? `${val} / 100 rec` : `${val}%`, font: { size: 12 } }
           }
         }
       }
@@ -504,6 +603,13 @@ const renderModalChart = async () => {
             callbacks: {
               label: (item) => {
                 const word = item.dataset.label || '';
+                const sent = item.label;
+                const meta = sentimentData.sentMetaMap?.[word]?.[sent];
+                if (isNorm && meta) {
+                  const normVal = meta.normalized.toFixed(3).replace(/\.?0+$/, '');
+                  const recStr = meta.totalRecords ? ` (${meta.raw.toLocaleString()} mentions / ${meta.totalRecords.toLocaleString()} records)` : ` (${meta.raw.toLocaleString()} mentions)`;
+                  return ` #${word}: ${normVal} per 100 records${recStr}`;
+                }
                 const value = item.formattedValue ?? item.raw ?? '';
                 return word ? `Word: #${word} - ${value}%` : `${value}%`;
               }
@@ -514,7 +620,7 @@ const renderModalChart = async () => {
           x: { ticks: { font: { size: 13, weight: '500' } } },
           y: {
             beginAtZero: true,
-            ticks: { callback: (val) => `${val}%`, font: { size: 12 } }
+            ticks: { callback: (val) => isNorm ? `${val} / 100 rec` : `${val}%`, font: { size: 12 } }
           }
         }
       }
@@ -608,7 +714,7 @@ onUnmounted(() => {
 });
 
 watch(
-  () => store.getResults,
+  [() => store.getResults, () => store.getMetricMode],
   () => {
     renderCharts();
     if (expandedChart.value) {
@@ -627,16 +733,80 @@ const modalTitle = computed(() => {
 });
 
 const modalSubtitle = computed(() => {
-  if (expandedChart.value === 'timeline') return 'Historical frequency trajectories across 200+ years of criticism.';
-  if (expandedChart.value === 'category') return 'Normalized percentage allocation across the 9 primary cultural categories.';
-  if (expandedChart.value === 'sentiment') return 'Comparative sentiment breakdown for all searched concepts.';
-  if (expandedChart.value === 'artist') return 'Detailed breakdown of top artists critiqued with this aesthetic descriptor.';
+  const isNorm = store.getMetricMode === 'normalized';
+  if (expandedChart.value === 'timeline') {
+    return isNorm
+      ? 'Historical frequency rate per 100 archive records (1785–2008).'
+      : 'Historical raw mention volume across 200+ years of criticism.';
+  }
+  if (expandedChart.value === 'category') {
+    return isNorm
+      ? 'Expressions per 100 records within each of the 9 primary cultural categories.'
+      : 'Normalized percentage allocation across the 9 primary cultural categories.';
+  }
+  if (expandedChart.value === 'sentiment') {
+    return isNorm
+      ? 'Expressions per 100 records within each sentiment category.'
+      : 'Comparative sentiment breakdown for all searched concepts.';
+  }
+  if (expandedChart.value === 'artist') {
+    return 'Detailed breakdown of top artists critiqued with this aesthetic descriptor.';
+  }
   return '';
 });
 </script>
 
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <!-- Global Metric Mode Toggle & Information Banner -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 p-4 shadow-sm">
+      <div class="flex items-center gap-3">
+        <div
+          class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm transition-colors"
+          :class="isNormalized ? 'bg-sky-50 text-sky-600 border border-sky-200' : 'bg-amber-50 text-amber-600 border border-amber-200'"
+        >
+          {{ isNormalized ? '⚡' : '📊' }}
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 class="text-sm font-bold text-slate-800">
+              Metric Mode
+            </h2>
+            <span
+              class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold"
+              :class="isNormalized ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-amber-50 text-amber-700 border border-amber-200'"
+            >
+              {{ isNormalized ? 'Normalized: expressions per 100 records' : 'Raw counts & percentage distribution' }}
+            </span>
+          </div>
+          <p class="text-xs text-slate-500">
+            {{ isNormalized
+              ? 'Controlled for archive volume: rates calculated relative to all 294,550 criticism documents per year, category, and sentiment.'
+              : 'Displays raw absolute mention counts and the proportion of mentions belonging to each category and sentiment.'
+            }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Segmented Toggle Control -->
+      <div class="inline-flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200 shadow-inner self-stretch sm:self-auto">
+        <button
+          @click="store.setMetricMode('normalized')"
+          class="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
+          :class="isNormalized ? 'bg-white text-sky-700 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'"
+        >
+          <span>⚡ Expressions / 100 records</span>
+        </button>
+        <button
+          @click="store.setMetricMode('raw')"
+          class="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
+          :class="!isNormalized ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'"
+        >
+          <span>📊 Raw mentions &amp; %</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Grid of 4 Charts -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- 1. Timeline Chart -->
@@ -646,7 +816,9 @@ const modalSubtitle = computed(() => {
             <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
               <span>📈 Expression Timeline</span>
             </h3>
-            <span class="text-xs text-slate-400">Historical mentions by year (1785–2008)</span>
+            <span class="text-xs text-slate-400">
+              {{ isNormalized ? 'Rate per 100 records by year (1785–2008)' : 'Historical mentions by year (1785–2008)' }}
+            </span>
           </div>
 
           <!-- Maximize Button -->
@@ -673,7 +845,9 @@ const modalSubtitle = computed(() => {
             <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
               <span>🎨 Artistic Categories</span>
             </h3>
-            <span class="text-xs text-slate-400">Distribution across 9 primary categories</span>
+            <span class="text-xs text-slate-400">
+              {{ isNormalized ? 'Rate per 100 records within each cultural category' : 'Distribution across 9 primary categories' }}
+            </span>
           </div>
 
           <!-- Maximize Button -->
@@ -700,7 +874,9 @@ const modalSubtitle = computed(() => {
             <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
               <span>💭 Sentiment Distribution</span>
             </h3>
-            <span class="text-xs text-slate-400">Positive, Neutral, Negative & Mixed</span>
+            <span class="text-xs text-slate-400">
+              {{ isNormalized ? 'Rate per 100 records within each sentiment' : 'Positive, Neutral, Negative & Mixed' }}
+            </span>
           </div>
 
           <!-- Maximize Button -->
@@ -864,7 +1040,25 @@ const modalSubtitle = computed(() => {
             </p>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-3">
+            <!-- Modal Toggle for analytical charts -->
+            <div v-if="expandedChart !== 'artist'" class="inline-flex items-center p-0.5 bg-slate-200/80 rounded-xl border border-slate-300/80 shadow-inner">
+              <button
+                @click="store.setMetricMode('normalized')"
+                class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
+                :class="isNormalized ? 'bg-white text-sky-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'"
+              >
+                ⚡ / 100 rec
+              </button>
+              <button
+                @click="store.setMetricMode('raw')"
+                class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
+                :class="!isNormalized ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'"
+              >
+                📊 Raw / %
+              </button>
+            </div>
+
             <button
               @click="closeExpandModal"
               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors shadow-sm"

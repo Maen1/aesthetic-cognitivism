@@ -5,7 +5,7 @@ from typing import List, Optional
 from bson import ObjectId
 import strawberry
 
-from .database import criticism_collection, word_collection
+from .database import criticism_collection, word_collection, corpus_metadata_collection
 from .schema import (
     Criticism,
     CriticismSearchResult,
@@ -40,6 +40,39 @@ PRIMARY_SENTIMENTS = [
     "Negative",
     "Mixed"
 ]
+
+_corpus_totals_cache = None
+
+
+async def get_corpus_totals() -> dict:
+    global _corpus_totals_cache
+    if _corpus_totals_cache is not None:
+        return _corpus_totals_cache
+    try:
+        doc = await corpus_metadata_collection.find_one({"_id": "corpus_totals"})
+        if doc:
+            _corpus_totals_cache = {
+                "years": {int(k) if str(k).isdigit() else k: v for k, v in (doc.get("records_by_year") or {}).items()},
+                "categories": doc.get("records_by_category") or {},
+                "sentiments": doc.get("records_by_sentiment") or {},
+                "total_criticisms": doc.get("total_criticisms") or 0
+            }
+        else:
+            _corpus_totals_cache = {
+                "years": {},
+                "categories": {},
+                "sentiments": {},
+                "total_criticisms": 0
+            }
+    except Exception as e:
+        print(f"Warning: Failed to load corpus_metadata: {e}")
+        _corpus_totals_cache = {
+            "years": {},
+            "categories": {},
+            "sentiments": {},
+            "total_criticisms": 0
+        }
+    return _corpus_totals_cache
 
 
 def map_to_primary_category(cat: str) -> str:
@@ -356,25 +389,73 @@ class Query:
         if not results:
             return []
 
+        corpus_totals = await get_corpus_totals()
+        c_years = corpus_totals.get("years", {})
+        c_cats = corpus_totals.get("categories", {})
+        c_sents = corpus_totals.get("sentiments", {})
+
         word_count_list = []
         for result in results:
             total_count = int(result.get("TotalCount", 0))
 
-            year_counts = [
-                CountByYear(year=int(yr) if str(yr).isdigit() else 0, count=float(count))
-                for yr, count in (result.get("YearCounts") or {}).items()
-            ]
+            raw_year_counts = result.get("YearCounts") or {}
+            norm_year_counts = result.get("YearCountsNormalized") or {}
+            year_counts = []
+            for yr_key, count_val in raw_year_counts.items():
+                yr_int = int(yr_key) if str(yr_key).isdigit() else 0
+                c_val = float(count_val)
+                tot_yr = c_years.get(yr_int) or c_years.get(str(yr_key)) or 0
+                if str(yr_key) in norm_year_counts:
+                    norm_c = float(norm_year_counts[str(yr_key)])
+                elif tot_yr > 0:
+                    norm_c = round((c_val / tot_yr) * 100, 3)
+                else:
+                    norm_c = 0.0
+
+                year_counts.append(CountByYear(
+                    year=yr_int,
+                    count=c_val,
+                    normalized_count=norm_c,
+                    total_records=tot_yr if tot_yr > 0 else None
+                ))
+
+            # Categories (both % share of word and normalized per 100 records)
+            raw_cat_counts_db = result.get("CategoryCountsRaw") or {}
+            norm_cat_counts_db = result.get("CategoryCountsNormalized") or {}
             raw_category_counts = result.get("CategoryCounts") or {}
             canonical_category_counts = {cat: 0.0 for cat in PRIMARY_CATEGORIES}
             for cat, count in raw_category_counts.items():
                 canonical_cat = map_to_primary_category(cat)
                 canonical_category_counts[canonical_cat] = canonical_category_counts.get(canonical_cat, 0.0) + float(count)
 
-            category_counts = [
-                CountByCategory(category=cat, count=round(canonical_category_counts[cat], 2))
-                for cat in PRIMARY_CATEGORIES
-            ]
+            category_counts = []
+            for cat in PRIMARY_CATEGORIES:
+                pct_val = round(canonical_category_counts[cat], 2)
+                tot_cat = c_cats.get(cat, 0)
 
+                if cat in raw_cat_counts_db:
+                    c_raw = float(raw_cat_counts_db[cat])
+                else:
+                    c_raw = round((pct_val / 100.0) * total_count, 1)
+
+                if cat in norm_cat_counts_db:
+                    c_norm = float(norm_cat_counts_db[cat])
+                elif tot_cat > 0:
+                    c_norm = round((c_raw / tot_cat) * 100, 3)
+                else:
+                    c_norm = 0.0
+
+                category_counts.append(CountByCategory(
+                    category=cat,
+                    count=pct_val,
+                    raw_count=c_raw,
+                    normalized_count=c_norm,
+                    total_records=tot_cat if tot_cat > 0 else None
+                ))
+
+            # Sentiments (both % share of word and normalized per 100 records)
+            raw_sent_counts_db = result.get("SentimentCountsRaw") or {}
+            norm_sent_counts_db = result.get("SentimentCountsNormalized") or {}
             raw_sentiment_counts = result.get("SentimentCounts") or {}
             canonical_sentiment_counts = {sent: 0.0 for sent in PRIMARY_SENTIMENTS}
             for sent, count in raw_sentiment_counts.items():
@@ -388,10 +469,31 @@ class Query:
                 else:
                     canonical_sentiment_counts["Neutral"] += float(count)
 
-            sentiment_counts = [
-                CountBySentiment(sentiment=sent, count=round(canonical_sentiment_counts[sent], 2))
-                for sent in PRIMARY_SENTIMENTS
-            ]
+            sentiment_counts = []
+            for sent in PRIMARY_SENTIMENTS:
+                pct_val = round(canonical_sentiment_counts[sent], 2)
+                tot_sent = c_sents.get(sent, 0)
+
+                if sent in raw_sent_counts_db:
+                    s_raw = float(raw_sent_counts_db[sent])
+                else:
+                    s_raw = round((pct_val / 100.0) * total_count, 1)
+
+                if sent in norm_sent_counts_db:
+                    s_norm = float(norm_sent_counts_db[sent])
+                elif tot_sent > 0:
+                    s_norm = round((s_raw / tot_sent) * 100, 3)
+                else:
+                    s_norm = 0.0
+
+                sentiment_counts.append(CountBySentiment(
+                    sentiment=sent,
+                    count=pct_val,
+                    raw_count=s_raw,
+                    normalized_count=s_norm,
+                    total_records=tot_sent if tot_sent > 0 else None
+                ))
+
 
             artist_counts = [
                 CountByArtist(

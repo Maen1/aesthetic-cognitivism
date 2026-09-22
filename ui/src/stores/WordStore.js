@@ -14,6 +14,7 @@ export const useWordStore = defineStore('Word', {
     searchTerm: '',
     words: [],
     results: [],
+    metricMode: 'normalized', // 'normalized' | 'raw'
     isLoading: false,
     errorMessage: null
   }),
@@ -23,11 +24,16 @@ export const useWordStore = defineStore('Word', {
     getWords: (state) => state.words,
     getWordsLength: (state) => state.words.length,
     getResults: (state) => state.results,
+    getMetricMode: (state) => state.metricMode,
   },
 
   actions: {
     increment() {
       this.count++;
+    },
+
+    setMetricMode(mode) {
+      this.metricMode = mode === 'raw' ? 'raw' : 'normalized';
     },
 
     searchWords(words) {
@@ -69,6 +75,9 @@ export const useWordStore = defineStore('Word', {
             CategoryCounts {
               category
               count
+              rawCount
+              normalizedCount
+              totalRecords
             }
             ArtistCounts {
               artist
@@ -84,10 +93,15 @@ export const useWordStore = defineStore('Word', {
             SentimentCounts {
               sentiment
               count
+              rawCount
+              normalizedCount
+              totalRecords
             }
             YearCounts {
               year
               count
+              normalizedCount
+              totalRecords
             }
           }
         }

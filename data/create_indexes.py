@@ -133,24 +133,91 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
         updated += len(batch)
     print(f"✅ Repaired & backfilled {updated:,} records in {time.time() - t0:.2f}s.")
 
-    # 2. Re-aggregate YearCounts for all concept words in word_counts
-    print("Rebuilding timeline YearCounts across all concept words in 'word_counts'...")
+    # 2. Re-aggregate Year, Category, and Sentiment counts (both Raw and Normalized per 100 records)
+    print("Rebuilding timeline, category, and sentiment counts across all concept words in 'word_counts'...")
     t0 = time.time()
-    word_year_counts = defaultdict(lambda: defaultdict(int))
-    for doc in col.find({}, {"_id": 1, "Found_Concepts": 1, "Year": 1}):
-        yr = doc.get("Year")
-        if yr is not None and 1700 <= yr <= 2050:
-            yr_str = str(yr)
-            for c in (doc.get("Found_Concepts") or []):
-                word_year_counts[c][yr_str] += 1
+    meta_col = db["corpus_metadata"]
 
+    corpus_years = defaultdict(int)
+    corpus_categories = defaultdict(int)
+    corpus_sentiments = defaultdict(int)
+
+    word_year_counts = defaultdict(lambda: defaultdict(int))
+    word_cat_counts = defaultdict(lambda: defaultdict(int))
+    word_sent_counts = defaultdict(lambda: defaultdict(int))
+
+    for doc in col.find({}, {"_id": 1, "Found_Concepts": 1, "Year": 1, "PrimaryCategory": 1, "PrimarySentiment": 1}):
+        yr = doc.get("Year")
+        cat = doc.get("PrimaryCategory")
+        sent = doc.get("PrimarySentiment")
+
+        if yr is not None and 1700 <= yr <= 2050:
+            corpus_years[str(yr)] += 1
+        if cat:
+            corpus_categories[cat] += 1
+        if sent:
+            corpus_sentiments[sent] += 1
+
+        concepts = doc.get("Found_Concepts") or []
+        for c in concepts:
+            if yr is not None and 1700 <= yr <= 2050:
+                word_year_counts[c][str(yr)] += 1
+            if cat:
+                word_cat_counts[c][cat] += 1
+            if sent:
+                word_sent_counts[c][sent] += 1
+
+    # Save corpus metadata totals
+    meta_col.replace_one(
+        {"_id": "corpus_totals"},
+        {
+            "_id": "corpus_totals",
+            "total_criticisms": total_docs,
+            "records_by_year": dict(corpus_years),
+            "records_by_category": dict(corpus_categories),
+            "records_by_sentiment": dict(corpus_sentiments),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        },
+        upsert=True
+    )
+    print(f"✅ Saved corpus baseline totals ({len(corpus_years)} years, {len(corpus_categories)} categories, {len(corpus_sentiments)} sentiments) to 'corpus_metadata'.")
+
+    all_words = set(list(word_year_counts.keys()) + list(word_cat_counts.keys()))
     word_batch = []
-    for word, y_counts in word_year_counts.items():
-        word_batch.append(UpdateOne({"_id": word}, {"$set": {"YearCounts": dict(y_counts)}}))
+    for word in all_words:
+        y_raw = dict(word_year_counts[word])
+        y_norm = {
+            yr: round((cnt / corpus_years[yr]) * 100, 3)
+            for yr, cnt in y_raw.items() if corpus_years.get(yr, 0) > 0
+        }
+
+        c_raw = dict(word_cat_counts[word])
+        c_norm = {
+            cat: round((cnt / corpus_categories[cat]) * 100, 3)
+            for cat, cnt in c_raw.items() if corpus_categories.get(cat, 0) > 0
+        }
+
+        s_raw = dict(word_sent_counts[word])
+        s_norm = {
+            sent: round((cnt / corpus_sentiments[sent]) * 100, 3)
+            for sent, cnt in s_raw.items() if corpus_sentiments.get(sent, 0) > 0
+        }
+
+        word_batch.append(UpdateOne(
+            {"_id": word},
+            {"$set": {
+                "YearCounts": y_raw,
+                "YearCountsNormalized": y_norm,
+                "CategoryCountsRaw": c_raw,
+                "CategoryCountsNormalized": c_norm,
+                "SentimentCountsRaw": s_raw,
+                "SentimentCountsNormalized": s_norm
+            }}
+        ))
 
     if word_batch:
         word_col.bulk_write(word_batch, ordered=False)
-    print(f"✅ Rebuilt timeline YearCounts for {len(word_batch)} words in {time.time() - t0:.2f}s.")
+    print(f"✅ Rebuilt raw and normalized statistics for {len(word_batch)} words in {time.time() - t0:.2f}s.")
 
     # 3. Build high performance compound indexes
     print("Building high-performance compound indexes (background=True)...")
