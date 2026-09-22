@@ -12,6 +12,7 @@ from .schema import (
     FilterMetadata,
     ArtistPercentage,
     ConceptSnippet,
+    ContextSnippet,
     WordCount,
     CountByArtist,
     CountByCategory,
@@ -519,7 +520,21 @@ class Query:
             )
 
             raw_concept_snippets = result.get("ConceptSnippets") or []
-            concept_snippets = [str(s) for s in raw_concept_snippets if s]
+            concept_snippets = []
+            for item in raw_concept_snippets:
+                if isinstance(item, dict):
+                    concept_snippets.append(
+                        ContextSnippet(
+                            snippet=str(item.get("snippet") or item.get("text") or ""),
+                            publication=str(item.get("publication")) if item.get("publication") else None,
+                            date=str(item.get("date")) if item.get("date") else None,
+                            year=int(item["year"]) if item.get("year") is not None else None,
+                            title=str(item.get("title")) if item.get("title") else None,
+                            author=str(item.get("author")) if item.get("author") else None,
+                        )
+                    )
+                elif isinstance(item, str) and item.strip():
+                    concept_snippets.append(ContextSnippet(snippet=item.strip()))
 
             word_count_list.append(WordCount(
                 _id=str(result.get("_id") or result.get("Word", "")),

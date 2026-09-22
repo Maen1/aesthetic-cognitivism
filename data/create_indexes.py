@@ -219,7 +219,61 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
         word_col.bulk_write(word_batch, ordered=False)
     print(f"✅ Rebuilt raw and normalized statistics for {len(word_batch)} words in {time.time() - t0:.2f}s.")
 
-    # 3. Build high performance compound indexes
+    # 3. Enrich ConceptSnippets with publication, date, year, title, author metadata
+    print("Enriching ConceptSnippets with publication and date metadata in 'word_counts'...")
+    t0 = time.time()
+    snippet_batch = []
+    words_in_db = [doc["_id"] for doc in word_col.find({}, {"_id": 1})]
+    for word in words_in_db:
+        cursor = col.find(
+            {"Found_Concepts": word},
+            {
+                f"Concept_Snippets.{word}": 1,
+                "Publication": 1,
+                "DateStr": 1,
+                "Year": 1,
+                "Title": 1,
+                "Author": 1
+            }
+        ).limit(100)
+
+        seen_snips = set()
+        enriched_snippets = []
+        for cdoc in cursor:
+            snips = (cdoc.get("Concept_Snippets") or {}).get(word, [])
+            pub = cdoc.get("Publication")
+            dt = cdoc.get("DateStr") or (str(cdoc.get("Year")) if cdoc.get("Year") else None)
+            yr = cdoc.get("Year")
+            title = cdoc.get("Title") if cdoc.get("Title") and cdoc.get("Title") != "Untitled" else None
+            author = cdoc.get("Author")
+
+            for s in snips:
+                if s and s not in seen_snips:
+                    seen_snips.add(s)
+                    enriched_snippets.append({
+                        "snippet": s,
+                        "publication": pub,
+                        "date": dt,
+                        "year": yr,
+                        "title": title,
+                        "author": author
+                    })
+                    if len(enriched_snippets) >= 50:
+                        break
+            if len(enriched_snippets) >= 50:
+                break
+
+        if enriched_snippets:
+            snippet_batch.append(UpdateOne(
+                {"_id": word},
+                {"$set": {"ConceptSnippets": enriched_snippets}}
+            ))
+
+    if snippet_batch:
+        word_col.bulk_write(snippet_batch, ordered=False)
+    print(f"✅ Enriched ConceptSnippets with metadata for {len(snippet_batch)} words in {time.time() - t0:.2f}s.")
+
+    # 4. Build high performance compound indexes
     print("Building high-performance compound indexes (background=True)...")
     t0 = time.time()
 

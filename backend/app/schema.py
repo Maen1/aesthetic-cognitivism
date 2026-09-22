@@ -99,6 +99,16 @@ class SnippetsByArtist:
 
 
 @strawberry.type
+class ContextSnippet:
+    snippet: str
+    publication: Optional[str] = None
+    date: Optional[str] = None
+    year: Optional[int] = None
+    title: Optional[str] = None
+    author: Optional[str] = None
+
+
+@strawberry.type
 class WordCount:
     _id: str
     Word: str
@@ -110,4 +120,4 @@ class WordCount:
     YearCounts: List[CountByYear] = strawberry.field(default_factory=list)
     CategoryCounts: List[CountByCategory] = strawberry.field(default_factory=list)
     SentimentCounts: List[CountBySentiment] = strawberry.field(default_factory=list)
-    ConceptSnippets: List[str] = strawberry.field(default_factory=list)
+    ConceptSnippets: List[ContextSnippet] = strawberry.field(default_factory=list)

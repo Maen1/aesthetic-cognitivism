@@ -89,6 +89,8 @@ class TestIngestPipeline(unittest.TestCase):
                 "Category": "Concerts",
                 "Sentiment": "Positive",
                 "Year": 1995,
+                "DateStr": "1995-07-29",
+                "Publication": "The Times",
                 "ArtistsList": ["Harold Pinter"],
                 "Concept_Snippets": {"beautiful": ["A beautiful line"]}
             },
@@ -97,6 +99,8 @@ class TestIngestPipeline(unittest.TestCase):
                 "Category": "Theater",
                 "Sentiment": "Neutral",
                 "Year": 1995,
+                "DateStr": "1995-08-15",
+                "Publication": "The Guardian",
                 "ArtistsList": ["Harold Pinter", "Harriet Walter"],
                 "Concept_Snippets": {"beautiful": ["Another beautiful line"]}
             }
@@ -114,7 +118,11 @@ class TestIngestPipeline(unittest.TestCase):
         self.assertEqual(beautiful["SentimentCounts"]["Neutral"], 50.0)
         self.assertEqual(beautiful["ArtistCounts"]["Harold Pinter"], 2)
         self.assertEqual(beautiful["ArtistCounts"]["Harriet Walter"], 1)
-        self.assertIn("A beautiful line", beautiful["ConceptSnippets"])
+        self.assertEqual(len(beautiful["ConceptSnippets"]), 2)
+        self.assertEqual(beautiful["ConceptSnippets"][0]["snippet"], "A beautiful line")
+        self.assertEqual(beautiful["ConceptSnippets"][0]["publication"], "The Times")
+        self.assertEqual(beautiful["ConceptSnippets"][0]["date"], "1995-07-29")
+        self.assertEqual(beautiful["ConceptSnippets"][0]["year"], 1995)
 
         # Normalized per 100 records assertions
         self.assertEqual(beautiful["YearCountsNormalized"]["1995"], 100.0)

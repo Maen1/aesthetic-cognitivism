@@ -46,6 +46,12 @@ const highlightWord = (text, word) => {
   );
 };
 
+const getSnippetText = (s) => (typeof s === 'object' && s !== null ? s.snippet || '' : String(s || ''));
+const getSnippetPub = (s) => (typeof s === 'object' && s !== null ? s.publication : null);
+const getSnippetDate = (s) => (typeof s === 'object' && s !== null ? (s.date || (s.year ? String(s.year) : null)) : null);
+const getSnippetTitle = (s) => (typeof s === 'object' && s !== null ? s.title : null);
+const getSnippetAuthor = (s) => (typeof s === 'object' && s !== null ? s.author : null);
+
 function seededRandom(seed) {
   const x = Math.sin(seed) * 10000;
   return x - Math.floor(x);
@@ -500,7 +506,7 @@ const renderModalChart = async () => {
   await nextTick();
 
   const modalCanvas = document.getElementById('modal-chart-canvas');
-  if (!modalCanvas || !expandedChart.value) return;
+  if (!modalCanvas || !expandedChart.value || expandedChart.value === 'snippets') return;
 
   const currentResults = store.getResults || [];
   const isNorm = store.getMetricMode === 'normalized';
@@ -729,6 +735,7 @@ const modalTitle = computed(() => {
   if (expandedChart.value === 'category') return '🎨 Artistic Categories Distribution';
   if (expandedChart.value === 'sentiment') return '💭 Sentiment Breakdown';
   if (expandedChart.value === 'artist') return '🎭 Artist Associations & Percentages';
+  if (expandedChart.value === 'snippets') return '📖 Contextual Concept Snippets';
   return 'Expanded Chart';
 });
 
@@ -751,6 +758,9 @@ const modalSubtitle = computed(() => {
   }
   if (expandedChart.value === 'artist') {
     return 'Detailed breakdown of top artists critiqued with this aesthetic descriptor.';
+  }
+  if (expandedChart.value === 'snippets') {
+    return 'Direct historical criticism excerpts with publication provenance and keyword highlighting.';
   }
   return '';
 });
@@ -978,20 +988,34 @@ const modalSubtitle = computed(() => {
           </p>
         </div>
 
-        <!-- Concept Switcher Tabs -->
-        <div class="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+          <!-- Concept Switcher Tabs -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button
+              v-for="res in results"
+              :key="res.Word"
+              @click="activeConceptSnippetTab = res.Word"
+              :class="[
+                'text-xs font-semibold px-3 py-1 rounded-lg border transition-colors',
+                activeConceptSnippetTab === res.Word
+                  ? 'bg-amber-500 text-white border-amber-500 shadow-sm font-bold'
+                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+              ]"
+            >
+              #{{ res.Word }} ({{ res.TotalCount }})
+            </button>
+          </div>
+
+          <!-- Maximize Button -->
           <button
-            v-for="res in results"
-            :key="res.Word"
-            @click="activeConceptSnippetTab = res.Word"
-            :class="[
-              'text-xs font-semibold px-3 py-1 rounded-lg border transition-colors',
-              activeConceptSnippetTab === res.Word
-                ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-            ]"
+            @click="openExpandModal('snippets')"
+            class="text-xs text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium ml-1"
+            title="Maximize View"
           >
-            #{{ res.Word }} ({{ res.TotalCount }})
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+            <span class="hidden sm:inline">Expand</span>
           </button>
         </div>
       </div>
@@ -1007,10 +1031,33 @@ const modalSubtitle = computed(() => {
           <div
             v-for="(snippet, sIdx) in activeConceptRecord.ConceptSnippets"
             :key="sIdx"
-            class="bg-amber-50/60 p-3 rounded-xl border border-amber-200/70 text-xs text-slate-800 leading-relaxed space-y-1"
+            class="bg-amber-50/60 hover:bg-amber-50/90 transition-colors p-3.5 rounded-xl border border-amber-200/70 text-xs text-slate-800 leading-relaxed flex flex-col justify-between space-y-2 shadow-xs"
           >
-            <div class="text-[10px] text-amber-800 font-bold uppercase tracking-wider">Example {{ sIdx + 1 }}</div>
-            <p v-html="highlightWord(snippet, activeConceptRecord.Word)"></p>
+            <div>
+              <!-- Metadata Header -->
+              <div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-amber-200/60 text-[11px]">
+                <span class="text-[10px] text-amber-900 font-bold uppercase tracking-wider px-1.5 py-0.5 bg-amber-200/60 rounded">
+                  Ex. {{ sIdx + 1 }}
+                </span>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-slate-600 font-medium">
+                  <span v-if="getSnippetPub(snippet)" class="inline-flex items-center gap-1 text-slate-700 font-semibold">
+                    📰 {{ getSnippetPub(snippet) }}
+                  </span>
+                  <span v-if="getSnippetDate(snippet)" class="inline-flex items-center gap-1 text-slate-500 font-medium">
+                    📅 {{ getSnippetDate(snippet) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Snippet Sentence with Concept Highlight -->
+              <p class="text-slate-800 font-serif italic text-[13px] leading-relaxed" v-html="highlightWord(getSnippetText(snippet), activeConceptRecord.Word)"></p>
+            </div>
+
+            <!-- Footer: Title / Author if available -->
+            <div v-if="getSnippetTitle(snippet) || getSnippetAuthor(snippet)" class="pt-1.5 border-t border-amber-200/40 text-[10px] text-slate-400 flex items-center justify-between truncate gap-2">
+              <span v-if="getSnippetTitle(snippet)" class="truncate" :title="getSnippetTitle(snippet)">“{{ getSnippetTitle(snippet) }}”</span>
+              <span v-if="getSnippetAuthor(snippet)" class="shrink-0 font-medium text-slate-500">✍️ {{ getSnippetAuthor(snippet) }}</span>
+            </div>
           </div>
         </div>
 
@@ -1042,7 +1089,7 @@ const modalSubtitle = computed(() => {
 
           <div class="flex items-center gap-3">
             <!-- Modal Toggle for analytical charts -->
-            <div v-if="expandedChart !== 'artist'" class="inline-flex items-center p-0.5 bg-slate-200/80 rounded-xl border border-slate-300/80 shadow-inner">
+            <div v-if="expandedChart !== 'artist' && expandedChart !== 'snippets'" class="inline-flex items-center p-0.5 bg-slate-200/80 rounded-xl border border-slate-300/80 shadow-inner">
               <button
                 @click="store.setMetricMode('normalized')"
                 class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
@@ -1073,8 +1120,67 @@ const modalSubtitle = computed(() => {
 
         <!-- Modal Body -->
         <div class="p-6 flex-1 overflow-y-auto space-y-6">
-          <div class="h-[52vh] min-h-[380px] w-full relative">
+          <!-- Canvas for Timeline, Category, Sentiment, Artist charts -->
+          <div v-if="expandedChart !== 'snippets'" class="h-[52vh] min-h-[380px] w-full relative">
             <canvas id="modal-chart-canvas"></canvas>
+          </div>
+
+          <!-- Snippets View for expandedChart === 'snippets' -->
+          <div v-if="expandedChart === 'snippets'" class="space-y-4">
+            <!-- Concept Switcher Tabs in Modal -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <button
+                  v-for="res in results"
+                  :key="res.Word"
+                  @click="activeConceptSnippetTab = res.Word"
+                  :class="[
+                    'text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors',
+                    activeConceptSnippetTab === res.Word
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm font-bold'
+                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                  ]"
+                >
+                  #{{ res.Word }} ({{ res.TotalCount }})
+                </button>
+              </div>
+              <span v-if="activeConceptRecord" class="text-xs text-slate-500">
+                Showing {{ activeConceptRecord.ConceptSnippets?.length || 0 }} samples for <strong>#{{ activeConceptRecord.Word }}</strong>
+              </span>
+            </div>
+
+            <!-- Snippet Grid in Modal (3 columns on large screens) -->
+            <div v-if="activeConceptRecord?.ConceptSnippets?.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div
+                v-for="(snippet, sIdx) in activeConceptRecord.ConceptSnippets"
+                :key="sIdx"
+                class="bg-amber-50/60 hover:bg-amber-50/90 transition-colors p-3.5 rounded-xl border border-amber-200/70 text-xs text-slate-800 leading-relaxed flex flex-col justify-between space-y-2 shadow-xs"
+              >
+                <div>
+                  <div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-amber-200/60 text-[11px]">
+                    <span class="text-[10px] text-amber-900 font-bold uppercase tracking-wider px-1.5 py-0.5 bg-amber-200/60 rounded">
+                      Ex. {{ sIdx + 1 }}
+                    </span>
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-slate-600 font-medium">
+                      <span v-if="getSnippetPub(snippet)" class="inline-flex items-center gap-1 text-slate-700 font-semibold">
+                        📰 {{ getSnippetPub(snippet) }}
+                      </span>
+                      <span v-if="getSnippetDate(snippet)" class="inline-flex items-center gap-1 text-slate-500 font-medium">
+                        📅 {{ getSnippetDate(snippet) }}
+                      </span>
+                    </div>
+                  </div>
+                  <p class="text-slate-800 font-serif italic text-[13px] leading-relaxed" v-html="highlightWord(getSnippetText(snippet), activeConceptRecord.Word)"></p>
+                </div>
+                <div v-if="getSnippetTitle(snippet) || getSnippetAuthor(snippet)" class="pt-1.5 border-t border-amber-200/40 text-[10px] text-slate-400 flex items-center justify-between truncate gap-2">
+                  <span v-if="getSnippetTitle(snippet)" class="truncate" :title="getSnippetTitle(snippet)">“{{ getSnippetTitle(snippet) }}”</span>
+                  <span v-if="getSnippetAuthor(snippet)" class="shrink-0 font-medium text-slate-500">✍️ {{ getSnippetAuthor(snippet) }}</span>
+                </div>
+              </div>
+            </div>
+            <p v-else class="text-xs text-slate-400 italic p-8 text-center bg-slate-50 rounded-xl">
+              No direct sentence snippets recorded for this concept.
+            </p>
           </div>
 
           <!-- Extra details if expanded chart is artist -->

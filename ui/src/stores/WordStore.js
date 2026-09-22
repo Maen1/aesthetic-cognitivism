@@ -88,7 +88,14 @@ export const useWordStore = defineStore('Word', {
               concept
               count
             }
-            ConceptSnippets
+            ConceptSnippets {
+              snippet
+              publication
+              date
+              year
+              title
+              author
+            }
 
             SentimentCounts {
               sentiment

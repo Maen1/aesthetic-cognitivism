@@ -215,7 +215,20 @@ def update_word_aggregates(doc, total_counts, year_counts, category_counts, sent
         word_snippets = snippets_dict.get(word, [])
         if word_snippets:
             if len(concept_snippets_agg[word]) < 50:
-                concept_snippets_agg[word].extend(word_snippets[:3])
+                pub = doc.get("Publication")
+                dt = doc.get("DateStr") or (str(doc.get("Year")) if doc.get("Year") else None)
+                yr = doc.get("Year")
+                title = doc.get("Title") if doc.get("Title") and doc.get("Title") != "Untitled" else None
+                author = doc.get("Author")
+                for snip in word_snippets[:3]:
+                    concept_snippets_agg[word].append({
+                        "snippet": snip,
+                        "publication": pub,
+                        "date": dt,
+                        "year": yr,
+                        "title": title,
+                        "author": author
+                    })
 
             for artist in artists:
                 if len(artist_snippets[word][artist]) < 15:
@@ -266,6 +279,26 @@ def build_word_count_records(total_counts, year_counts, category_counts, sentime
             for sent, cnt in sent_raw.items() if c_sents.get(sent, 0) > 0
         }
 
+        seen_snips = set()
+        unique_concept_snippets = []
+        for item in concept_snippets_agg[word]:
+            snip_text = item["snippet"] if isinstance(item, dict) else str(item)
+            if snip_text and snip_text not in seen_snips:
+                seen_snips.add(snip_text)
+                if isinstance(item, dict):
+                    unique_concept_snippets.append(item)
+                else:
+                    unique_concept_snippets.append({
+                        "snippet": snip_text,
+                        "publication": None,
+                        "date": None,
+                        "year": None,
+                        "title": None,
+                        "author": None
+                    })
+                if len(unique_concept_snippets) >= 50:
+                    break
+
         results.append({
             "_id": word,
             "Word": word,
@@ -280,7 +313,7 @@ def build_word_count_records(total_counts, year_counts, category_counts, sentime
             "SentimentCountsNormalized": sent_norm,
             "ArtistCounts": top_artists_dict,
             "ArtistSnippets": pruned_snippets,
-            "ConceptSnippets": list(dict.fromkeys(concept_snippets_agg[word]))[:50]
+            "ConceptSnippets": unique_concept_snippets
         })
     return results
 

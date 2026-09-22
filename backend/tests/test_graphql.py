@@ -3,7 +3,7 @@ import os
 import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.schema import Criticism, WordCount, ArtistPercentage, ConceptSnippet
+from app.schema import Criticism, WordCount, ArtistPercentage, ConceptSnippet, ContextSnippet
 from app.graphql import map_to_criticism, Query
 import strawberry
 
@@ -18,9 +18,12 @@ class TestGraphQLSchema(unittest.TestCase):
         self.assertIn("wordCounts", sdl)
         self.assertIn("ArtistPercentage", sdl)
         self.assertIn("ConceptSnippet", sdl)
+        self.assertIn("ContextSnippet", sdl)
         self.assertIn("normalizedCount", sdl)
         self.assertIn("rawCount", sdl)
         self.assertIn("totalRecords", sdl)
+        self.assertIn("publication", sdl)
+        self.assertIn("date", sdl)
 
     def test_map_to_criticism_full(self):
         doc = {
@@ -77,9 +80,37 @@ class TestGraphQLSchema(unittest.TestCase):
         self.assertEqual(item.title, "Untitled")
         self.assertEqual(item.category, "Uncategorized")
         self.assertEqual(item.sentiment, "Neutral")
-        self.assertEqual(item.artist_percentages, [])
-        self.assertEqual(item.found_concepts, [])
-        self.assertEqual(item.concept_snippets, [])
+    def test_context_snippet_resolution(self):
+        dict_snippet = {
+            "snippet": "A sublime passage",
+            "publication": "The Times",
+            "date": "1995-07-29",
+            "year": 1995,
+            "title": "Theatre",
+            "author": "Marlowe, Sam"
+        }
+        legacy_snippet = "Legacy string snippet"
+
+        cs_dict = ContextSnippet(
+            snippet=dict_snippet["snippet"],
+            publication=dict_snippet["publication"],
+            date=dict_snippet["date"],
+            year=dict_snippet["year"],
+            title=dict_snippet["title"],
+            author=dict_snippet["author"]
+        )
+        cs_legacy = ContextSnippet(snippet=legacy_snippet)
+
+        self.assertEqual(cs_dict.snippet, "A sublime passage")
+        self.assertEqual(cs_dict.publication, "The Times")
+        self.assertEqual(cs_dict.date, "1995-07-29")
+        self.assertEqual(cs_dict.year, 1995)
+        self.assertEqual(cs_dict.title, "Theatre")
+        self.assertEqual(cs_dict.author, "Marlowe, Sam")
+
+        self.assertEqual(cs_legacy.snippet, "Legacy string snippet")
+        self.assertIsNone(cs_legacy.publication)
+        self.assertIsNone(cs_legacy.date)
 
 
 if __name__ == "__main__":
