@@ -95,6 +95,7 @@ export const useWordStore = defineStore('Word', {
               year
               title
               author
+              era
             }
 
             SentimentCounts {

@@ -24,6 +24,7 @@ class TestGraphQLSchema(unittest.TestCase):
         self.assertIn("totalRecords", sdl)
         self.assertIn("publication", sdl)
         self.assertIn("date", sdl)
+        self.assertIn("era", sdl)
 
     def test_map_to_criticism_full(self):
         doc = {
@@ -97,7 +98,8 @@ class TestGraphQLSchema(unittest.TestCase):
             date=dict_snippet["date"],
             year=dict_snippet["year"],
             title=dict_snippet["title"],
-            author=dict_snippet["author"]
+            author=dict_snippet["author"],
+            era="1980–2008"
         )
         cs_legacy = ContextSnippet(snippet=legacy_snippet)
 
@@ -107,10 +109,12 @@ class TestGraphQLSchema(unittest.TestCase):
         self.assertEqual(cs_dict.year, 1995)
         self.assertEqual(cs_dict.title, "Theatre")
         self.assertEqual(cs_dict.author, "Marlowe, Sam")
+        self.assertEqual(cs_dict.era, "1980–2008")
 
         self.assertEqual(cs_legacy.snippet, "Legacy string snippet")
         self.assertIsNone(cs_legacy.publication)
         self.assertIsNone(cs_legacy.date)
+        self.assertIsNone(cs_legacy.era)
 
 
 if __name__ == "__main__":

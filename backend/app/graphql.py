@@ -523,14 +523,29 @@ class Query:
             concept_snippets = []
             for item in raw_concept_snippets:
                 if isinstance(item, dict):
+                    yr_val = int(item["year"]) if item.get("year") is not None else None
+                    era_val = str(item.get("era")) if item.get("era") else None
+                    if not era_val and yr_val:
+                        if yr_val < 1850:
+                            era_val = "1785–1849"
+                        elif yr_val < 1900:
+                            era_val = "1850–1899"
+                        elif yr_val < 1950:
+                            era_val = "1900–1949"
+                        elif yr_val < 1980:
+                            era_val = "1950–1979"
+                        else:
+                            era_val = "1980–2008"
+
                     concept_snippets.append(
                         ContextSnippet(
                             snippet=str(item.get("snippet") or item.get("text") or ""),
                             publication=str(item.get("publication")) if item.get("publication") else None,
                             date=str(item.get("date")) if item.get("date") else None,
-                            year=int(item["year"]) if item.get("year") is not None else None,
+                            year=yr_val,
                             title=str(item.get("title")) if item.get("title") else None,
                             author=str(item.get("author")) if item.get("author") else None,
+                            era=era_val,
                         )
                     )
                 elif isinstance(item, str) and item.strip():

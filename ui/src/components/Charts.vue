@@ -21,6 +21,8 @@ const selectedCount = ref('');
 const selectedPercentage = ref('');
 const selectedSnippets = ref([]);
 const activeConceptSnippetTab = ref('');
+const snippetSortOrder = ref('asc'); // 'asc' = oldest first (1785 → 2008), 'desc' = newest first
+const activeSnippetEra = ref('all'); // 'all' | '1785–1849' | '1850–1899' | '1900–1949' | '1950–1979' | '1980–2008'
 
 // Modal Expand State
 const expandedChart = ref(null); // 'timeline' | 'category' | 'sentiment' | 'artist' | null
@@ -49,8 +51,36 @@ const highlightWord = (text, word) => {
 const getSnippetText = (s) => (typeof s === 'object' && s !== null ? s.snippet || '' : String(s || ''));
 const getSnippetPub = (s) => (typeof s === 'object' && s !== null ? s.publication : null);
 const getSnippetDate = (s) => (typeof s === 'object' && s !== null ? (s.date || (s.year ? String(s.year) : null)) : null);
+const getSnippetYear = (s) => (typeof s === 'object' && s !== null ? (s.year ? Number(s.year) : null) : null);
 const getSnippetTitle = (s) => (typeof s === 'object' && s !== null ? s.title : null);
 const getSnippetAuthor = (s) => (typeof s === 'object' && s !== null ? s.author : null);
+const getSnippetEra = (s) => {
+  if (typeof s === 'object' && s !== null && s.era) return s.era;
+  const yr = getSnippetYear(s);
+  if (!yr) return 'Unknown';
+  if (yr < 1850) return '1785–1849';
+  if (yr < 1900) return '1850–1899';
+  if (yr < 1950) return '1900–1949';
+  if (yr < 1980) return '1950–1979';
+  return '1980–2008';
+};
+
+const getEraBadgeInfo = (era) => {
+  switch (era) {
+    case '1785–1849':
+      return { label: 'Romanticism / 18th–19th C.', icon: '🏛️', bg: 'bg-rose-100/90 text-rose-800 border-rose-200' };
+    case '1850–1899':
+      return { label: 'Victorian / Late 19th C.', icon: '🎩', bg: 'bg-amber-100/90 text-amber-800 border-amber-200' };
+    case '1900–1949':
+      return { label: 'Modernism / Interwar', icon: '📻', bg: 'bg-emerald-100/90 text-emerald-800 border-emerald-200' };
+    case '1950–1979':
+      return { label: 'Post-war / Mid-Century', icon: '📺', bg: 'bg-sky-100/90 text-sky-800 border-sky-200' };
+    case '1980–2008':
+      return { label: 'Contemporary / Turn of Century', icon: '💻', bg: 'bg-purple-100/90 text-purple-800 border-purple-200' };
+    default:
+      return { label: era || 'Historical', icon: '📜', bg: 'bg-slate-100 text-slate-700 border-slate-200' };
+  }
+};
 
 function seededRandom(seed) {
   const x = Math.sin(seed) * 10000;
@@ -97,6 +127,56 @@ const activeConceptRecord = computed(() => {
   if (!activeConceptSnippetTab.value) return results.value[0];
   return results.value.find((r) => r.Word === activeConceptSnippetTab.value) || results.value[0];
 });
+
+const HISTORICAL_ERA_DEFINITIONS = [
+  { id: '1785–1849', label: '1785–1849', name: 'Romanticism / Early', icon: '🏛️' },
+  { id: '1850–1899', label: '1850–1899', name: 'Victorian', icon: '🎩' },
+  { id: '1900–1949', label: '1900–1949', name: 'Modernism', icon: '📻' },
+  { id: '1950–1979', label: '1950–1979', name: 'Post-war', icon: '📺' },
+  { id: '1980–2008', label: '1980–2008', name: 'Contemporary', icon: '💻' },
+];
+
+const availableSnippetEras = computed(() => {
+  const list = activeConceptRecord.value?.ConceptSnippets || [];
+  const counts = { all: list.length };
+  HISTORICAL_ERA_DEFINITIONS.forEach((def) => { counts[def.id] = 0; });
+  list.forEach((s) => {
+    const era = getSnippetEra(s);
+    if (era) {
+      counts[era] = (counts[era] || 0) + 1;
+    }
+  });
+  return [
+    { id: 'all', label: 'All Eras', name: 'Full Range', icon: '🌐', count: list.length },
+    ...HISTORICAL_ERA_DEFINITIONS.map((def) => ({
+      ...def,
+      count: counts[def.id] || 0
+    }))
+  ];
+});
+
+const processedConceptSnippets = computed(() => {
+  const list = activeConceptRecord.value?.ConceptSnippets || [];
+  let filtered = [...list];
+  if (activeSnippetEra.value !== 'all') {
+    filtered = filtered.filter((s) => getSnippetEra(s) === activeSnippetEra.value);
+  }
+  filtered.sort((a, b) => {
+    const ya = getSnippetYear(a) ?? (snippetSortOrder.value === 'asc' ? 9999 : -9999);
+    const yb = getSnippetYear(b) ?? (snippetSortOrder.value === 'asc' ? 9999 : -9999);
+    if (ya !== yb) {
+      return snippetSortOrder.value === 'asc' ? ya - yb : yb - ya;
+    }
+    const da = getSnippetDate(a) || '';
+    const db = getSnippetDate(b) || '';
+    return snippetSortOrder.value === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
+  });
+  return filtered;
+});
+
+const toggleSnippetSort = () => {
+  snippetSortOrder.value = snippetSortOrder.value === 'asc' ? 'desc' : 'asc';
+};
 
 const isNormalized = computed(() => store.getMetricMode === 'normalized');
 
@@ -1024,21 +1104,40 @@ const modalSubtitle = computed(() => {
       <div v-if="activeConceptRecord" class="space-y-2">
         <div class="flex items-center justify-between text-xs text-slate-600">
           <span>Showing context snippets for <strong class="text-slate-900">#{{ activeConceptRecord.Word }}</strong>:</span>
-          <span class="text-slate-400">{{ activeConceptRecord.ConceptSnippets?.length || 0 }} samples available</span>
+          <div class="flex items-center gap-2">
+            <span class="text-slate-400">{{ processedConceptSnippets.length }} samples</span>
+            <button
+              @click="toggleSnippetSort"
+              class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs"
+              :title="snippetSortOrder === 'asc' ? 'Oldest first (1785 → 2008). Click to sort Newest first.' : 'Newest first (2008 → 1785). Click to sort Oldest first.'"
+            >
+              <span>{{ snippetSortOrder === 'asc' ? '⏳ Oldest first' : '⌛ Newest first' }}</span>
+            </button>
+          </div>
         </div>
 
-        <div v-if="activeConceptRecord.ConceptSnippets?.length" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+        <div v-if="processedConceptSnippets.length" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
           <div
-            v-for="(snippet, sIdx) in activeConceptRecord.ConceptSnippets"
+            v-for="(snippet, sIdx) in processedConceptSnippets"
             :key="sIdx"
             class="bg-amber-50/60 hover:bg-amber-50/90 transition-colors p-3.5 rounded-xl border border-amber-200/70 text-xs text-slate-800 leading-relaxed flex flex-col justify-between space-y-2 shadow-xs"
           >
             <div>
               <!-- Metadata Header -->
               <div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-amber-200/60 text-[11px]">
-                <span class="text-[10px] text-amber-900 font-bold uppercase tracking-wider px-1.5 py-0.5 bg-amber-200/60 rounded">
-                  Ex. {{ sIdx + 1 }}
-                </span>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-[10px] text-amber-900 font-bold uppercase tracking-wider px-1.5 py-0.5 bg-amber-200/60 rounded">
+                    Ex. {{ sIdx + 1 }}
+                  </span>
+                  <span
+                    v-if="getSnippetEra(snippet)"
+                    :class="['text-[10px] font-medium px-1.5 py-0.5 rounded border flex items-center gap-1', getEraBadgeInfo(getSnippetEra(snippet)).bg]"
+                    :title="getEraBadgeInfo(getSnippetEra(snippet)).label"
+                  >
+                    <span>{{ getEraBadgeInfo(getSnippetEra(snippet)).icon }}</span>
+                    <span>{{ getSnippetEra(snippet) }}</span>
+                  </span>
+                </div>
                 <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-slate-600 font-medium">
                   <span v-if="getSnippetPub(snippet)" class="inline-flex items-center gap-1 text-slate-700 font-semibold">
                     📰 {{ getSnippetPub(snippet) }}
@@ -1127,7 +1226,7 @@ const modalSubtitle = computed(() => {
 
           <!-- Snippets View for expandedChart === 'snippets' -->
           <div v-if="expandedChart === 'snippets'" class="space-y-4">
-            <!-- Concept Switcher Tabs in Modal -->
+            <!-- Concept Switcher Tabs & Sorting in Modal -->
             <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div class="flex flex-wrap items-center gap-1.5">
                 <button
@@ -1144,23 +1243,67 @@ const modalSubtitle = computed(() => {
                   #{{ res.Word }} ({{ res.TotalCount }})
                 </button>
               </div>
-              <span v-if="activeConceptRecord" class="text-xs text-slate-500">
-                Showing {{ activeConceptRecord.ConceptSnippets?.length || 0 }} samples for <strong>#{{ activeConceptRecord.Word }}</strong>
-              </span>
+              <div class="flex items-center gap-2">
+                <span v-if="activeConceptRecord" class="text-xs text-slate-500">
+                  Showing {{ processedConceptSnippets.length }} of {{ activeConceptRecord.ConceptSnippets?.length || 0 }} samples for <strong>#{{ activeConceptRecord.Word }}</strong>
+                </span>
+                <button
+                  @click="toggleSnippetSort"
+                  class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+                  :title="snippetSortOrder === 'asc' ? 'Oldest first (1785 → 2008). Click to sort Newest first.' : 'Newest first (2008 → 1785). Click to sort Oldest first.'"
+                >
+                  <span>{{ snippetSortOrder === 'asc' ? '⏳ Oldest first' : '⌛ Newest first' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Historical Era Filter Bar in Modal -->
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1">
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1 shrink-0">Historical Era:</span>
+              <button
+                v-for="era in availableSnippetEras"
+                :key="era.id"
+                @click="activeSnippetEra = era.id"
+                :disabled="era.count === 0 && era.id !== 'all'"
+                :class="[
+                  'text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors flex items-center gap-1.5 shrink-0',
+                  activeSnippetEra === era.id
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm font-semibold'
+                    : era.count === 0
+                      ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                ]"
+              >
+                <span>{{ era.icon }}</span>
+                <span>{{ era.label }}</span>
+                <span :class="['text-[10px] px-1 rounded-full font-semibold', activeSnippetEra === era.id ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-500']">
+                  {{ era.count }}
+                </span>
+              </button>
             </div>
 
             <!-- Snippet Grid in Modal (3 columns on large screens) -->
-            <div v-if="activeConceptRecord?.ConceptSnippets?.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div v-if="processedConceptSnippets.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <div
-                v-for="(snippet, sIdx) in activeConceptRecord.ConceptSnippets"
+                v-for="(snippet, sIdx) in processedConceptSnippets"
                 :key="sIdx"
                 class="bg-amber-50/60 hover:bg-amber-50/90 transition-colors p-3.5 rounded-xl border border-amber-200/70 text-xs text-slate-800 leading-relaxed flex flex-col justify-between space-y-2 shadow-xs"
               >
                 <div>
                   <div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-amber-200/60 text-[11px]">
-                    <span class="text-[10px] text-amber-900 font-bold uppercase tracking-wider px-1.5 py-0.5 bg-amber-200/60 rounded">
-                      Ex. {{ sIdx + 1 }}
-                    </span>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="text-[10px] text-amber-900 font-bold uppercase tracking-wider px-1.5 py-0.5 bg-amber-200/60 rounded">
+                        Ex. {{ sIdx + 1 }}
+                      </span>
+                      <span
+                        v-if="getSnippetEra(snippet)"
+                        :class="['text-[10px] font-medium px-1.5 py-0.5 rounded border flex items-center gap-1', getEraBadgeInfo(getSnippetEra(snippet)).bg]"
+                        :title="getEraBadgeInfo(getSnippetEra(snippet)).label"
+                      >
+                        <span>{{ getEraBadgeInfo(getSnippetEra(snippet)).icon }}</span>
+                        <span>{{ getSnippetEra(snippet) }}</span>
+                      </span>
+                    </div>
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-slate-600 font-medium">
                       <span v-if="getSnippetPub(snippet)" class="inline-flex items-center gap-1 text-slate-700 font-semibold">
                         📰 {{ getSnippetPub(snippet) }}
@@ -1179,7 +1322,7 @@ const modalSubtitle = computed(() => {
               </div>
             </div>
             <p v-else class="text-xs text-slate-400 italic p-8 text-center bg-slate-50 rounded-xl">
-              No direct sentence snippets recorded for this concept.
+              No direct sentence snippets recorded for this concept in the selected era.
             </p>
           </div>
 

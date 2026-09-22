@@ -106,6 +106,7 @@ class ContextSnippet:
     year: Optional[int] = None
     title: Optional[str] = None
     author: Optional[str] = None
+    era: Optional[str] = None
 
 
 @strawberry.type

@@ -192,6 +192,26 @@ def normalize_criticism_record(raw_dict):
     }
 
 
+HISTORICAL_ERAS = [
+    {"label": "1785–1849", "min": 1785, "max": 1850},
+    {"label": "1850–1899", "min": 1850, "max": 1900},
+    {"label": "1900–1949", "min": 1900, "max": 1950},
+    {"label": "1950–1979", "min": 1950, "max": 1980},
+    {"label": "1980–2008", "min": 1980, "max": 2015},
+]
+
+
+def get_era_label(year):
+    if not year:
+        return "Unknown"
+    for era in HISTORICAL_ERAS:
+        if era["min"] <= year < era["max"]:
+            return era["label"]
+    if year < 1785:
+        return "Pre-1785"
+    return "Post-2008"
+
+
 def update_word_aggregates(doc, total_counts, year_counts, category_counts, sentiment_counts, artist_counts, artist_snippets, concept_snippets_agg):
     """
     Update running aggregation dictionaries for a single document.
@@ -214,21 +234,49 @@ def update_word_aggregates(doc, total_counts, year_counts, category_counts, sent
 
         word_snippets = snippets_dict.get(word, [])
         if word_snippets:
-            if len(concept_snippets_agg[word]) < 50:
-                pub = doc.get("Publication")
-                dt = doc.get("DateStr") or (str(doc.get("Year")) if doc.get("Year") else None)
-                yr = doc.get("Year")
-                title = doc.get("Title") if doc.get("Title") and doc.get("Title") != "Untitled" else None
-                author = doc.get("Author")
-                for snip in word_snippets[:3]:
-                    concept_snippets_agg[word].append({
-                        "snippet": snip,
-                        "publication": pub,
-                        "date": dt,
-                        "year": yr,
-                        "title": title,
-                        "author": author
-                    })
+            pub = doc.get("Publication")
+            dt = doc.get("DateStr") or (str(doc.get("Year")) if doc.get("Year") else None)
+            yr = doc.get("Year")
+            title = doc.get("Title") if doc.get("Title") and doc.get("Title") != "Untitled" else None
+            author = doc.get("Author")
+            era_label = get_era_label(yr)
+
+            if isinstance(concept_snippets_agg[word], dict):
+                era_bucket = concept_snippets_agg[word][era_label]
+                if len(era_bucket) < 10:
+                    for snip in word_snippets[:3]:
+                        era_bucket.append({
+                            "snippet": snip,
+                            "publication": pub,
+                            "date": dt,
+                            "year": yr,
+                            "title": title,
+                            "author": author,
+                            "era": era_label
+                        })
+                elif len(concept_snippets_agg[word]["_surplus"]) < 50:
+                    for snip in word_snippets[:2]:
+                        concept_snippets_agg[word]["_surplus"].append({
+                            "snippet": snip,
+                            "publication": pub,
+                            "date": dt,
+                            "year": yr,
+                            "title": title,
+                            "author": author,
+                            "era": era_label
+                        })
+            else:
+                if len(concept_snippets_agg[word]) < 50:
+                    for snip in word_snippets[:3]:
+                        concept_snippets_agg[word].append({
+                            "snippet": snip,
+                            "publication": pub,
+                            "date": dt,
+                            "year": yr,
+                            "title": title,
+                            "author": author,
+                            "era": era_label
+                        })
 
             for artist in artists:
                 if len(artist_snippets[word][artist]) < 15:
@@ -281,23 +329,55 @@ def build_word_count_records(total_counts, year_counts, category_counts, sentime
 
         seen_snips = set()
         unique_concept_snippets = []
-        for item in concept_snippets_agg[word]:
-            snip_text = item["snippet"] if isinstance(item, dict) else str(item)
-            if snip_text and snip_text not in seen_snips:
-                seen_snips.add(snip_text)
-                if isinstance(item, dict):
-                    unique_concept_snippets.append(item)
-                else:
-                    unique_concept_snippets.append({
-                        "snippet": snip_text,
-                        "publication": None,
-                        "date": None,
-                        "year": None,
-                        "title": None,
-                        "author": None
-                    })
-                if len(unique_concept_snippets) >= 50:
-                    break
+        raw_snips = concept_snippets_agg[word]
+
+        if isinstance(raw_snips, dict):
+            # Stratified merge across canonical eras
+            for era in HISTORICAL_ERAS:
+                for item in raw_snips.get(era["label"], []):
+                    snip_text = item["snippet"] if isinstance(item, dict) else str(item)
+                    if snip_text and snip_text not in seen_snips:
+                        seen_snips.add(snip_text)
+                        unique_concept_snippets.append(item)
+            # Backfill from surplus or other eras if less than 50
+            if len(unique_concept_snippets) < 50:
+                surplus = raw_snips.get("_surplus", [])
+                for item in surplus:
+                    snip_text = item["snippet"] if isinstance(item, dict) else str(item)
+                    if snip_text and snip_text not in seen_snips:
+                        seen_snips.add(snip_text)
+                        unique_concept_snippets.append(item)
+                        if len(unique_concept_snippets) >= 50:
+                            break
+        else:
+            for item in raw_snips:
+                snip_text = item["snippet"] if isinstance(item, dict) else str(item)
+                if snip_text and snip_text not in seen_snips:
+                    seen_snips.add(snip_text)
+                    if isinstance(item, dict):
+                        if "era" not in item:
+                            item["era"] = get_era_label(item.get("year"))
+                        unique_concept_snippets.append(item)
+                    else:
+                        unique_concept_snippets.append({
+                            "snippet": snip_text,
+                            "publication": None,
+                            "date": None,
+                            "year": None,
+                            "title": None,
+                            "author": None,
+                            "era": "Unknown"
+                        })
+                    if len(unique_concept_snippets) >= 50:
+                        break
+
+        # Sort chronologically ascending
+        unique_concept_snippets.sort(
+            key=lambda x: (
+                x.get("year") if isinstance(x, dict) and x.get("year") is not None else 9999,
+                (x.get("date") or "") if isinstance(x, dict) else ""
+            )
+        )
 
         results.append({
             "_id": word,
@@ -328,7 +408,7 @@ def aggregate_word_data(documents):
     sentiment_counts = defaultdict(lambda: defaultdict(int))
     artist_counts = defaultdict(lambda: defaultdict(int))
     artist_snippets = defaultdict(lambda: defaultdict(list))
-    concept_snippets_agg = defaultdict(list)
+    concept_snippets_agg = defaultdict(lambda: defaultdict(list))
 
     corpus_years = defaultdict(int)
     corpus_categories = defaultdict(int)
@@ -403,7 +483,7 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     sentiment_counts = defaultdict(lambda: defaultdict(int))
     artist_counts = defaultdict(lambda: defaultdict(int))
     artist_snippets = defaultdict(lambda: defaultdict(list))
-    concept_snippets_agg = defaultdict(list)
+    concept_snippets_agg = defaultdict(lambda: defaultdict(list))
 
     corpus_years = defaultdict(int)
     corpus_categories = defaultdict(int)
