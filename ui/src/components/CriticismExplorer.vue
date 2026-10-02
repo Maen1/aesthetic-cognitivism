@@ -8,8 +8,124 @@ const store = useCriticismStore();
 const searchInput = ref('');
 const artistInput = ref('');
 const authorInput = ref('');
+const startYearInput = ref('');
+const endYearInput = ref('');
 const selectedConceptSnippet = ref(null);
 const expandedTextId = ref(null);
+
+const historicalEras = [
+  { label: 'All Years', subtitle: '1785–2008', start: null, end: null, icon: '🌐' },
+  { label: '1785–1849', subtitle: 'Romanticism', start: 1785, end: 1849, icon: '🏛️' },
+  { label: '1850–1899', subtitle: 'Victorian', start: 1850, end: 1899, icon: '🎩' },
+  { label: '1900–1949', subtitle: 'Modernism', start: 1900, end: 1949, icon: '📻' },
+  { label: '1950–1979', subtitle: 'Post-war', start: 1950, end: 1979, icon: '📺' },
+  { label: '1980–2008', subtitle: 'Contemporary', start: 1980, end: 2008, icon: '💻' }
+];
+
+const isEraActive = (era) => {
+  if (era.start === null && era.end === null) {
+    return !store.startYear && !store.endYear;
+  }
+  return store.startYear === era.start && store.endYear === era.end;
+};
+
+const selectEra = (era) => {
+  startYearInput.value = era.start ? String(era.start) : '';
+  endYearInput.value = era.end ? String(era.end) : '';
+  store.setYearRange(era.start, era.end);
+};
+
+const handleYearInputDebounced = () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    const s = startYearInput.value.trim() ? parseInt(startYearInput.value, 10) : null;
+    const e = endYearInput.value.trim() ? parseInt(endYearInput.value, 10) : null;
+    store.setYearRange(s, e);
+  }, 400);
+};
+
+const clearYearRange = () => {
+  startYearInput.value = '';
+  endYearInput.value = '';
+  store.setYearRange(null, null);
+};
+
+const sortOptions = [
+  { label: '🗓️ Newest First (2008 → 1785)', value: 'date_desc' },
+  { label: '⏳ Oldest First (1785 → 2008)', value: 'date_asc' },
+  { label: '🔤 Title (A → Z)', value: 'title_asc' },
+  { label: '🔤 Title (Z → A)', value: 'title_desc' },
+  { label: '✍️ Critic / Author (A → Z)', value: 'author_asc' },
+  { label: '✍️ Critic / Author (Z → A)', value: 'author_desc' },
+];
+
+const handleSortChange = () => {
+  store.currentPage = 1;
+  store.searchCriticisms();
+};
+
+const minBound = computed(() => store.filterMetadata.minYear || 1785);
+
+const maxBound = computed(() => store.filterMetadata.maxYear || 2008);
+
+const sliderMin = computed({
+  get: () => {
+    if (startYearInput.value && !isNaN(parseInt(startYearInput.value, 10))) {
+      return parseInt(startYearInput.value, 10);
+    }
+    return store.startYear ? Number(store.startYear) : minBound.value;
+  },
+  set: (val) => {
+    let num = parseInt(val, 10);
+    if (isNaN(num)) return;
+    if (num > sliderMax.value) {
+      num = sliderMax.value;
+    }
+    startYearInput.value = String(num);
+    handleYearInputDebounced();
+  }
+});
+
+const sliderMax = computed({
+  get: () => {
+    if (endYearInput.value && !isNaN(parseInt(endYearInput.value, 10))) {
+      return parseInt(endYearInput.value, 10);
+    }
+    return store.endYear ? Number(store.endYear) : maxBound.value;
+  },
+  set: (val) => {
+    let num = parseInt(val, 10);
+    if (isNaN(num)) return;
+    if (num < sliderMin.value) {
+      num = sliderMin.value;
+    }
+    endYearInput.value = String(num);
+    handleYearInputDebounced();
+  }
+});
+
+const minPercent = computed(() => {
+  const range = maxBound.value - minBound.value;
+  if (range <= 0) return 0;
+  return Math.max(0, Math.min(100, ((sliderMin.value - minBound.value) / range) * 100));
+});
+
+const maxPercent = computed(() => {
+  const range = maxBound.value - minBound.value;
+  if (range <= 0) return 100;
+  return Math.max(0, Math.min(100, ((sliderMax.value - minBound.value) / range) * 100));
+});
+
+watch(
+  () => [store.startYear, store.endYear],
+  ([newStart, newEnd]) => {
+    if (newStart === null && newEnd === null && (startYearInput.value || endYearInput.value)) {
+      startYearInput.value = '';
+      endYearInput.value = '';
+    }
+  }
+);
+
 
 let debounceTimer = null;
 const handleSearchDebounced = () => {
@@ -51,10 +167,13 @@ const resetAll = () => {
   searchInput.value = '';
   artistInput.value = '';
   authorInput.value = '';
+  startYearInput.value = '';
+  endYearInput.value = '';
   selectedConceptSnippet.value = null;
   expandedTextId.value = null;
   store.resetFilters();
 };
+
 
 const toggleFullText = (id) => {
   expandedTextId.value = expandedTextId.value === id ? null : id;
@@ -201,6 +320,115 @@ onMounted(() => {
         </div>
       </div>
 
+      <!-- Publication Year Range Filter -->
+      <div class="space-y-2 pt-1 border-t border-slate-100">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+            <span>🗓️ Publication Year Range:</span>
+            <span v-if="store.startYear || store.endYear" class="text-sky-600 font-bold lowercase tracking-normal text-xs">
+              ({{ store.startYear || store.filterMetadata.minYear || 1785 }} – {{ store.endYear || store.filterMetadata.maxYear || 2008 }})
+            </span>
+          </div>
+
+          <!-- Dual Year Inputs -->
+          <div class="flex items-center gap-1.5 text-xs text-slate-500">
+            <span>From:</span>
+            <input
+              type="number"
+              v-model="startYearInput"
+              @input="handleYearInputDebounced"
+              :min="minBound"
+              :max="maxBound"
+              :placeholder="String(minBound)"
+              class="w-20 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500 font-mono"
+            />
+            <span>To:</span>
+            <input
+              type="number"
+              v-model="endYearInput"
+              @input="handleYearInputDebounced"
+              :min="minBound"
+              :max="maxBound"
+              :placeholder="String(maxBound)"
+              class="w-20 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500 font-mono"
+            />
+            <button
+              v-if="store.startYear || store.endYear"
+              @click="clearYearRange"
+              class="text-xs text-slate-400 hover:text-rose-600 transition-colors px-1"
+              title="Clear Year Filter"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- Interactive Dual Range Slider -->
+        <div class="px-1 pt-1 pb-1">
+          <div class="relative w-full h-6 flex items-center">
+            <!-- Full background track -->
+            <div class="absolute w-full h-2 bg-slate-200 rounded-full"></div>
+            <!-- Highlighted active range track -->
+            <div
+              class="absolute h-2 bg-sky-500 rounded-full transition-all duration-75"
+              :style="{
+                left: `${minPercent}%`,
+                width: `${Math.max(0, maxPercent - minPercent)}%`
+              }"
+            ></div>
+            <!-- Dual range inputs -->
+            <input
+              type="range"
+              :min="minBound"
+              :max="maxBound"
+              v-model.number="sliderMin"
+              :style="{ zIndex: sliderMin > maxBound - 15 ? 5 : 3 }"
+              class="range-slider-input"
+              aria-label="Filter minimum year"
+            />
+            <input
+              type="range"
+              :min="minBound"
+              :max="maxBound"
+              v-model.number="sliderMax"
+              :style="{ zIndex: 4 }"
+              class="range-slider-input"
+              aria-label="Filter maximum year"
+            />
+          </div>
+
+          <!-- Slider Legend / Markers -->
+          <div class="flex justify-between text-[10px] text-slate-400 font-mono mt-0.5 px-0.5 select-none">
+            <span>{{ minBound }}</span>
+            <span class="hidden sm:inline">1850</span>
+            <span class="hidden sm:inline">1900</span>
+            <span class="hidden sm:inline">1950</span>
+            <span>{{ maxBound }}</span>
+          </div>
+        </div>
+
+        <!-- Historical Era Quick Buttons -->
+        <div class="flex flex-wrap items-center gap-1.5">
+
+          <button
+            v-for="era in historicalEras"
+            :key="era.label"
+            type="button"
+            @click="selectEra(era)"
+            :class="[
+              'inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg transition-all border font-medium',
+              isEraActive(era)
+                ? 'bg-sky-600 text-white border-sky-600 shadow-sm font-semibold'
+                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+            ]"
+          >
+            <span>{{ era.icon }}</span>
+            <span>{{ era.label }}</span>
+            <span v-if="era.subtitle" class="text-[10px] opacity-75 font-normal">({{ era.subtitle }})</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Category Filter Group -->
       <div class="space-y-2 pt-1 border-t border-slate-100">
         <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">
@@ -246,19 +474,49 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Results Stats Bar -->
-      <div class="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
-        <span v-if="!store.isLoading">
-          Showing <strong class="text-slate-800">{{ store.searchResults.length }}</strong> of
-          <strong class="text-slate-800">{{ store.totalCount.toLocaleString() }}</strong> criticism articles
-        </span>
-        <span v-else class="text-sky-600 font-medium animate-pulse">Filtering criticisms...</span>
+      <!-- Results Stats Bar & Controls -->
+      <div class="flex flex-wrap items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100 gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <span v-if="!store.isLoading">
+            Showing <strong class="text-slate-800">{{ store.searchResults.length }}</strong> of
+            <strong class="text-slate-800">{{ store.totalCount.toLocaleString() }}</strong> criticism articles
+          </span>
+          <span v-else class="text-sky-600 font-medium animate-pulse">Filtering criticisms...</span>
 
-        <span v-if="store.totalPages > 1">
-          Page {{ store.currentPage }} of {{ store.totalPages.toLocaleString() }}
-        </span>
+          <!-- Active Year Badge -->
+          <span
+            v-if="store.startYear || store.endYear"
+            class="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 text-xs px-2 py-0.5 rounded-full font-semibold"
+          >
+            <span>🗓️ {{ store.startYear || '1785' }} &ndash; {{ store.endYear || '2008' }}</span>
+            <button @click="clearYearRange" class="hover:text-sky-900 ml-0.5 text-[11px]">&times;</button>
+          </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <!-- Sort Selector -->
+          <div class="flex items-center gap-1.5">
+            <label for="sort-select" class="font-medium text-slate-600 text-xs whitespace-nowrap">Sort:</label>
+            <select
+              id="sort-select"
+              v-model="store.sortBy"
+              @change="handleSortChange"
+              class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-sky-500 shadow-sm cursor-pointer"
+            >
+              <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+
+          <span v-if="store.totalPages > 1" class="text-slate-400 whitespace-nowrap">
+            Page {{ store.currentPage }} of {{ store.totalPages.toLocaleString() }}
+          </span>
+        </div>
       </div>
     </div>
+
+
 
     <!-- Error Alert -->
     <div v-if="store.errorMessage" class="bg-red-50 border border-red-200 text-red-800 rounded-xl p-4 text-sm">
@@ -475,3 +733,68 @@ onMounted(() => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.range-slider-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  margin: 0;
+  outline: none;
+}
+
+.range-slider-input::-webkit-slider-thumb {
+  pointer-events: auto;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #0284c7;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+
+.range-slider-input::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  background-color: #0369a1;
+}
+
+.range-slider-input::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.25);
+  background-color: #075985;
+}
+
+.range-slider-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #0284c7;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+
+.range-slider-input::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  background-color: #0369a1;
+}
+
+.range-slider-input::-moz-range-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.25);
+  background-color: #075985;
+}
+</style>
+

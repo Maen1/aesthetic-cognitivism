@@ -51,6 +51,9 @@ class FilterMetadata:
     categories: List[str]
     sentiments: List[str]
     total_criticisms: int
+    min_year: Optional[int] = 1785
+    max_year: Optional[int] = 2008
+
 
 
 @strawberry.type

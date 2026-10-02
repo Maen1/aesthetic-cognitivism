@@ -15,6 +15,9 @@ export const useCriticismStore = defineStore('Criticism', {
     selectedArtist: '',
     selectedAuthor: '',
     selectedConcept: '',
+    startYear: null,
+    endYear: null,
+    sortBy: 'date_desc',
     currentPage: 1,
     pageSize: 12,
     searchResults: [],
@@ -23,7 +26,9 @@ export const useCriticismStore = defineStore('Criticism', {
     filterMetadata: {
       categories: [],
       sentiments: [],
-      totalCriticisms: 0
+      totalCriticisms: 0,
+      minYear: 1785,
+      maxYear: 2008
     },
     isLoading: false,
     errorMessage: null,
@@ -44,9 +49,12 @@ export const useCriticismStore = defineStore('Criticism', {
             categories
             sentiments
             totalCriticisms
+            minYear
+            maxYear
           }
         }
       `;
+
 
       try {
         const response = await fetch(getGraphQLEndpoint(), {
@@ -75,6 +83,9 @@ export const useCriticismStore = defineStore('Criticism', {
           $category: String
           $sentiment: String
           $concept: String
+          $startYear: Int
+          $endYear: Int
+          $sortBy: String
           $page: Int
           $pageSize: Int
         ) {
@@ -85,6 +96,9 @@ export const useCriticismStore = defineStore('Criticism', {
             category: $category
             sentiment: $sentiment
             concept: $concept
+            startYear: $startYear
+            endYear: $endYear
+            sortBy: $sortBy
             page: $page
             pageSize: $pageSize
           ) {
@@ -129,9 +143,14 @@ export const useCriticismStore = defineStore('Criticism', {
         category: this.selectedCategory !== 'All' ? this.selectedCategory : null,
         sentiment: this.selectedSentiment !== 'All' ? this.selectedSentiment : null,
         concept: this.selectedConcept.trim() || null,
+        startYear: this.startYear !== null && this.startYear !== undefined && this.startYear !== '' ? parseInt(this.startYear, 10) : null,
+        endYear: this.endYear !== null && this.endYear !== undefined && this.endYear !== '' ? parseInt(this.endYear, 10) : null,
+        sortBy: this.sortBy || 'date_desc',
         page: this.currentPage,
         pageSize: this.pageSize
       };
+
+
 
       try {
         const response = await fetch(getGraphQLEndpoint(), {
@@ -203,6 +222,19 @@ export const useCriticismStore = defineStore('Criticism', {
       this.searchCriticisms();
     },
 
+    setYearRange(start, end) {
+      this.startYear = start !== null && start !== undefined && start !== '' ? parseInt(start, 10) : null;
+      this.endYear = end !== null && end !== undefined && end !== '' ? parseInt(end, 10) : null;
+      this.currentPage = 1;
+      this.searchCriticisms();
+    },
+
+    setSortBy(sort) {
+      this.sortBy = sort || 'date_desc';
+      this.currentPage = 1;
+      this.searchCriticisms();
+    },
+
     resetFilters() {
       this.searchQuery = '';
       this.selectedCategory = 'All';
@@ -210,9 +242,14 @@ export const useCriticismStore = defineStore('Criticism', {
       this.selectedArtist = '';
       this.selectedAuthor = '';
       this.selectedConcept = '';
+      this.startYear = null;
+      this.endYear = null;
+      this.sortBy = 'date_desc';
       this.currentPage = 1;
       this.searchCriticisms();
     },
+
+
 
     openCriticism(item) {
       this.activeCriticism = item;

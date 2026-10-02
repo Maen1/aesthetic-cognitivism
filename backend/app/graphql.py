@@ -269,14 +269,20 @@ class Query:
     async def filter_metadata(self) -> FilterMetadata:
         try:
             total = await criticism_collection.estimated_document_count()
+            corpus_totals = await get_corpus_totals()
+            years = [int(y) for y in corpus_totals.get("years", {}).keys() if str(y).isdigit() and 1700 <= int(y) <= 2050]
+            min_yr = min(years) if years else 1785
+            max_yr = max(years) if years else 2008
             return FilterMetadata(
                 categories=PRIMARY_CATEGORIES,
                 sentiments=PRIMARY_SENTIMENTS,
-                total_criticisms=total
+                total_criticisms=total,
+                min_year=min_yr,
+                max_year=max_yr
             )
         except Exception as e:
             print(f"Error fetching filter metadata: {e}")
-            return FilterMetadata(categories=[], sentiments=[], total_criticisms=0)
+            return FilterMetadata(categories=[], sentiments=[], total_criticisms=0, min_year=1785, max_year=2008)
 
     @strawberry.field
     async def search_criticisms(
@@ -287,12 +293,23 @@ class Query:
         category: Optional[str] = None,
         sentiment: Optional[str] = None,
         concept: Optional[str] = None,
+        start_year: Optional[int] = None,
+        end_year: Optional[int] = None,
+        sort_by: Optional[str] = "date_desc",
         page: int = 1,
         page_size: int = 20
     ) -> CriticismSearchResult:
         page = max(1, page)
         page_size = max(1, min(100, page_size))
         filter_clauses = []
+
+        year_filter = {}
+        if start_year is not None:
+            year_filter["$gte"] = int(start_year)
+        if end_year is not None:
+            year_filter["$lte"] = int(end_year)
+        if year_filter:
+            filter_clauses.append({"Year": year_filter})
 
         if category and category.strip() and category.strip().lower() != "all":
             clean_cat = category.strip()
@@ -344,6 +361,21 @@ class Query:
         mongo_filter = {"$and": filter_clauses} if filter_clauses else {}
         skip = (page - 1) * page_size
 
+        # Determine sort criteria
+        sort_mode = (sort_by or "date_desc").strip().lower()
+        if sort_mode == "date_asc":
+            sort_criteria = [("DateEpoch", 1), ("_id", 1)]
+        elif sort_mode == "title_asc":
+            sort_criteria = [("Title", 1), ("DateEpoch", -1)]
+        elif sort_mode == "title_desc":
+            sort_criteria = [("Title", -1), ("DateEpoch", -1)]
+        elif sort_mode == "author_asc":
+            sort_criteria = [("Author", 1), ("DateEpoch", -1)]
+        elif sort_mode == "author_desc":
+            sort_criteria = [("Author", -1), ("DateEpoch", -1)]
+        else:  # date_desc default
+            sort_criteria = [("DateEpoch", -1), ("_id", -1)]
+
         # Fast parallel execution: count + find
         if not mongo_filter:
             count_task = criticism_collection.estimated_document_count()
@@ -352,11 +384,12 @@ class Query:
 
         find_task = (
             criticism_collection.find(mongo_filter)
-            .sort([("DateEpoch", -1), ("_id", -1)])
+            .sort(sort_criteria)
             .skip(skip)
             .limit(page_size)
             .to_list(length=page_size)
         )
+
 
         total, raw_docs = await asyncio.gather(count_task, find_task)
         total_pages = max(1, math.ceil(total / page_size)) if total > 0 else 1

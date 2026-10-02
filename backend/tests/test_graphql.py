@@ -26,6 +26,65 @@ class TestGraphQLSchema(unittest.TestCase):
         self.assertIn("date", sdl)
         self.assertIn("era", sdl)
 
+    def test_schema_has_year_filter_fields(self):
+        schema = strawberry.Schema(query=Query)
+        sdl = str(schema)
+        self.assertIn("startYear: Int", sdl)
+        self.assertIn("endYear: Int", sdl)
+        self.assertIn("minYear: Int", sdl)
+        self.assertIn("maxYear: Int", sdl)
+        self.assertIn("sortBy: String", sdl)
+
+    def test_graphql_queries_with_year_filter(self):
+        async def run_queries():
+            schema = strawberry.Schema(query=Query)
+            meta_res = await schema.execute("""
+                query {
+                    filterMetadata {
+                        minYear
+                        maxYear
+                        categories
+                        sentiments
+                    }
+                }
+            """)
+            self.assertIsNone(meta_res.errors)
+            self.assertIsNotNone(meta_res.data)
+            self.assertIn("minYear", meta_res.data["filterMetadata"])
+            self.assertIn("maxYear", meta_res.data["filterMetadata"])
+            self.assertGreaterEqual(meta_res.data["filterMetadata"]["maxYear"], meta_res.data["filterMetadata"]["minYear"])
+
+            search_res = await schema.execute("""
+                query {
+                    searchCriticisms(startYear: 1800, endYear: 1850, sortBy: "date_asc", pageSize: 5) {
+                        total
+                        page
+                        pageSize
+                        items {
+                            id
+                            year
+                        }
+                    }
+                }
+            """)
+            self.assertIsNone(search_res.errors)
+            self.assertIsNotNone(search_res.data)
+            items = search_res.data["searchCriticisms"]["items"]
+            self.assertTrue(len(items) > 0)
+            years = [it["year"] for it in items if it["year"] is not None]
+            for yr in years:
+                self.assertGreaterEqual(yr, 1800)
+                self.assertLessEqual(yr, 1850)
+            # Verify ascending order
+            self.assertEqual(years, sorted(years))
+
+        import asyncio
+        asyncio.run(run_queries())
+
+
+
+
+
     def test_map_to_criticism_full(self):
         doc = {
             "_id": "test_1",
