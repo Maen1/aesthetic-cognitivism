@@ -596,8 +596,9 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
 
 
 def main():
+    default_input = os.path.join(os.path.dirname(__file__), "final_analyzed_critics2_updated.jsonl")
     parser = argparse.ArgumentParser(description="Ingest JSONL dataset for Aesthetic Cognitivism into MongoDB.")
-    parser.add_argument("--input", "-i", required=True, help="Path to input .jsonl file")
+    parser.add_argument("--input", "-i", default=default_input, help="Path to input .jsonl file (default: final_analyzed_critics2_updated.jsonl)")
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URL", "mongodb://localhost:27017"), help="MongoDB connection URI")
     parser.add_argument("--db", default="aestheticv3", help="MongoDB database name")
     parser.add_argument("--batch-size", type=int, default=10000, help="Batch size for bulk operations")

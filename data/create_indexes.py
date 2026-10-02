@@ -212,7 +212,8 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
                 "CategoryCountsNormalized": c_norm,
                 "SentimentCountsRaw": s_raw,
                 "SentimentCountsNormalized": s_norm
-            }}
+            }},
+            upsert=True
         ))
 
     if word_batch:

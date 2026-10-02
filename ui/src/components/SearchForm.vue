@@ -4,8 +4,7 @@ import { ref } from 'vue';
 
 const store = useWordStore();
 
-const searchTerm = ref('');
-const exampleWords = ['beautiful', 'profound', 'delighted', 'emotional', 'revolutionary', 'exquisite', 'authentic', 'melancholy'];
+const exampleWords = ['beautiful', 'dramatic', 'original', 'melancholic', 'brilliant', 'poignant', 'authentic', 'sublime'];
 
 const searchExpressions = async () => {
   if (!searchTerm.value.trim()) return;
