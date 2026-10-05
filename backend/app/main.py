@@ -1,11 +1,23 @@
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 
 from strawberry.asgi import GraphQL
 from .graphql import Query
+from .database import ensure_indexes
 import strawberry
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Ensure all required indexes exist in the background on startup
+    asyncio.create_task(ensure_indexes())
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
 
 origins = [
 	"http://localhost.tiangolo.com",

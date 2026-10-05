@@ -393,22 +393,81 @@ class Query:
         else:  # date_desc default
             sort_criteria = [("DateEpoch", -1), ("_id", -1)]
 
+        has_text_query = bool(query and query.strip())
+
         # Fast parallel execution: count + find
         if not mongo_filter:
             count_task = criticism_collection.estimated_document_count()
+        elif has_text_query:
+            # Bound text search count to 10,000 for instant response and zero memory thrashing
+            count_task = criticism_collection.count_documents(mongo_filter, limit=10000)
         else:
             count_task = criticism_collection.count_documents(mongo_filter)
 
-        find_task = (
-            criticism_collection.find(mongo_filter)
-            .sort(sort_criteria)
-            .skip(skip)
-            .limit(page_size)
-            .to_list(length=page_size)
-        )
+        async def execute_find():
+            if has_text_query:
+                # Two-stage fetch for text search: sort only _id to prevent pulling
+                # multi-megabyte Full_text fields into MongoDB in-memory sort buffer.
+                id_docs = await (
+                    criticism_collection.find(mongo_filter, {"_id": 1})
+                    .sort(sort_criteria)
+                    .skip(skip)
+                    .limit(page_size)
+                    .to_list(length=page_size)
+                )
+                page_ids = [d["_id"] for d in id_docs]
+                if not page_ids:
+                    return []
+                full_docs_cursor = criticism_collection.find({"_id": {"$in": page_ids}})
+                docs_by_id = {d["_id"]: d async for d in full_docs_cursor}
+                return [docs_by_id[pid] for pid in page_ids if pid in docs_by_id]
+            else:
+                return await (
+                    criticism_collection.find(mongo_filter)
+                    .sort(sort_criteria)
+                    .skip(skip)
+                    .limit(page_size)
+                    .to_list(length=page_size)
+                )
+
+        find_task = execute_find()
+
+        try:
+            total, raw_docs = await asyncio.gather(count_task, find_task)
+        except Exception as e:
+            err_str = str(e).lower()
+            if "text index required" in err_str or "indexnotfound" in err_str:
+                import logging
+                logging.getLogger("aesthetic.graphql").warning(
+                    f"Text index missing during search_criticisms ({e}). Triggering index build and falling back to regex."
+                )
+                from .database import ensure_indexes
+                asyncio.create_task(ensure_indexes())
+
+                # Rebuild filter replacing $text with title/summary regex
+                fallback_filters = [c for c in filter_clauses if "$text" not in c]
+                if query and query.strip():
+                    q_regex = re.escape(query.strip())
+                    fallback_filters.append({
+                        "$or": [
+                            {"Title": {"$regex": q_regex, "$options": "i"}},
+                            {"Summary": {"$regex": q_regex, "$options": "i"}}
+                        ]
+                    })
+                mongo_filter = {"$and": fallback_filters} if fallback_filters else {}
+                count_task = criticism_collection.count_documents(mongo_filter, limit=5000)
+                find_task = (
+                    criticism_collection.find(mongo_filter)
+                    .sort(sort_criteria)
+                    .skip(skip)
+                    .limit(page_size)
+                    .to_list(length=page_size)
+                )
+                total, raw_docs = await asyncio.gather(count_task, find_task)
+            else:
+                raise e
 
 
-        total, raw_docs = await asyncio.gather(count_task, find_task)
         total_pages = max(1, math.ceil(total / page_size)) if total > 0 else 1
 
         items = [map_to_criticism(d) for d in raw_docs]
