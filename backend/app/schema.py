@@ -55,6 +55,12 @@ class FilterMetadata:
     max_year: Optional[int] = 2008
 
 
+@strawberry.type
+class ConceptItem:
+    word: str
+    total_count: Optional[int] = 0
+
+
 
 @strawberry.type
 class CountByArtist:

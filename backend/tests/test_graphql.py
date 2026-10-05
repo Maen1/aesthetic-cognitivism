@@ -78,8 +78,28 @@ class TestGraphQLSchema(unittest.TestCase):
             # Verify ascending order
             self.assertEqual(years, sorted(years))
 
+            concept_res = await schema.execute("""
+                query {
+                    availableConcepts {
+                        word
+                        totalCount
+                    }
+                }
+            """)
+            self.assertIsNone(concept_res.errors)
+            self.assertIsNotNone(concept_res.data)
+            concepts = concept_res.data["availableConcepts"]
+            self.assertGreater(len(concepts), 0)
+            self.assertTrue(any(c["word"] == "sublime" for c in concepts))
+
         import asyncio
         asyncio.run(run_queries())
+
+    def test_schema_has_available_concepts(self):
+        schema = strawberry.Schema(query=Query)
+        sdl = str(schema)
+        self.assertIn("availableConcepts: [ConceptItem!]!", sdl)
+        self.assertIn("type ConceptItem", sdl)
 
 
 

@@ -800,8 +800,9 @@ onUnmounted(() => {
 });
 
 watch(
-  [() => store.getResults, () => store.getMetricMode],
-  () => {
+  [() => store.getResults, () => store.getMetricMode, () => store.hasSearched],
+  async () => {
+    await nextTick();
     renderCharts();
     if (expandedChart.value) {
       renderModalChart();
@@ -896,9 +897,54 @@ const modalSubtitle = computed(() => {
         </button>
       </div>
     </div>
+    <!-- Empty State When Searched Concept Not Found -->
+    <div
+      v-if="store.hasSearched && !store.getResults.length && !store.isLoading"
+      class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-12 text-center space-y-4 max-w-7xl mx-auto"
+    >
+      <div class="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center text-3xl mx-auto shadow-sm">
+        🔍
+      </div>
+      <div class="space-y-1.5 max-w-md mx-auto">
+        <h3 class="text-base font-bold text-slate-800">
+          No Analytics Available
+        </h3>
+        <p class="text-xs text-slate-500 leading-relaxed">
+          No historical frequency or sentiment data was found for
+          <strong class="text-slate-700 font-mono">{{ (store.words || []).map(w => `"${w}"`).join(', ') }}</strong> in the 273 curated aesthetic concepts.
+        </p>
+        <p class="text-[11px] text-slate-400">
+          Check your spelling or choose from the curated suggestions above.
+        </p>
+      </div>
+      <div class="pt-2">
+        <button
+          type="button"
+          @click="store.resetSearch"
+          class="text-xs font-semibold px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 rounded-xl transition-colors shadow-sm"
+        >
+          Restore Sample Overview
+        </button>
+      </div>
+    </div>
 
-    <!-- Grid of 4 Charts -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Active Analytics Content (Charts & Snippets) -->
+    <template v-else>
+      <!-- Preview Note when viewing default sample demonstration data -->
+      <div
+        v-if="!store.hasSearched && !store.getResults.length"
+        class="bg-sky-50/70 border border-sky-200/80 rounded-xl px-4 py-2.5 text-xs text-sky-800 flex items-center justify-between"
+      >
+        <div class="flex items-center gap-2">
+          <span>💡</span>
+          <span>
+            <strong>Sample Preview Mode</strong> &mdash; Displaying demonstration baseline metrics for <code>#beautiful</code>. Search above to analyze any of the 273 curated concepts.
+          </span>
+        </div>
+      </div>
+
+      <!-- Grid of 4 Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- 1. Timeline Chart -->
       <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4 relative group">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1165,6 +1211,7 @@ const modalSubtitle = computed(() => {
         </p>
       </div>
     </div>
+    </template>
 
     <!-- ========================================================================= -->
     <!-- EXPANDED CHART MODAL (LIGHTBOX / SPOTLIGHT VIEW) -->

@@ -19,7 +19,8 @@ from .schema import (
     CountByYear,
     CountByConcept,
     CountBySentiment,
-    SnippetsByArtist
+    SnippetsByArtist,
+    ConceptItem
 )
 
 
@@ -283,6 +284,22 @@ class Query:
         except Exception as e:
             print(f"Error fetching filter metadata: {e}")
             return FilterMetadata(categories=[], sentiments=[], total_criticisms=0, min_year=1785, max_year=2008)
+
+    @strawberry.field
+    async def available_concepts(self) -> List[ConceptItem]:
+        try:
+            cursor = word_collection.find({}, {"Word": 1, "TotalCount": 1}).sort("Word", 1)
+            docs = await cursor.to_list(length=1000)
+            return [
+                ConceptItem(
+                    word=str(d.get("Word") or d.get("_id") or ""),
+                    total_count=int(d.get("TotalCount") or 0)
+                )
+                for d in docs if (d.get("Word") or d.get("_id"))
+            ]
+        except Exception as e:
+            print(f"Error fetching available concepts: {e}")
+            return []
 
     @strawberry.field
     async def search_criticisms(

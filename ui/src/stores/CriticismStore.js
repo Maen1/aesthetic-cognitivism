@@ -1,8 +1,12 @@
 import { defineStore } from 'pinia';
 
 const getGraphQLEndpoint = () => {
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '5173') {
-    return 'http://localhost:8000/api/graphql/';
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+    window.location.port !== '8000'
+  ) {
+    return `http://${window.location.hostname}:8000/api/graphql/`;
   }
   return '/api/graphql/';
 };
