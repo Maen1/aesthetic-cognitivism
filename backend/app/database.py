@@ -18,6 +18,7 @@ CRITICISM_INDEXES = [
     ([("PrimaryCategory", ASCENDING), ("PrimarySentiment", ASCENDING), ("DateEpoch", DESCENDING)], {}),
     ([("PrimarySentiment", ASCENDING), ("DateEpoch", DESCENDING)], {}),
     ([("Found_Concepts", ASCENDING), ("DateEpoch", DESCENDING)], {}),
+    ([("Found_Concepts", ASCENDING), ("PrimaryCategory", ASCENDING)], {}),
     ([("ArtistsList", ASCENDING), ("DateEpoch", DESCENDING)], {}),
     ([("Author", ASCENDING), ("DateEpoch", DESCENDING)], {}),
     ([("Year", ASCENDING), ("DateEpoch", DESCENDING)], {}),

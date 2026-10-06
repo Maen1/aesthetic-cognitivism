@@ -77,6 +77,46 @@ async def get_corpus_totals() -> dict:
     return _corpus_totals_cache
 
 
+async def get_category_year_totals() -> dict:
+    corpus_totals = await get_corpus_totals()
+    if "category_years" in corpus_totals and corpus_totals["category_years"]:
+        return corpus_totals["category_years"]
+
+    try:
+        doc = await corpus_metadata_collection.find_one({"_id": "category_year_totals"})
+        if doc and doc.get("totals"):
+            corpus_totals["category_years"] = doc["totals"]
+            return corpus_totals["category_years"]
+
+        pipeline = [
+            {"$match": {"Year": {"$ne": None}, "PrimaryCategory": {"$ne": None}}},
+            {"$group": {
+                "_id": {"category": "$PrimaryCategory", "year": "$Year"},
+                "count": {"$sum": 1}
+            }}
+        ]
+        cursor = criticism_collection.aggregate(pipeline)
+        items = await cursor.to_list(length=None)
+        cat_year_map = {}
+        for it in items:
+            cat = it["_id"].get("category")
+            yr = it["_id"].get("year")
+            cnt = it.get("count", 0)
+            if cat and yr is not None:
+                cat_year_map[f"{cat}_{yr}"] = cnt
+
+        await corpus_metadata_collection.update_one(
+            {"_id": "category_year_totals"},
+            {"$set": {"totals": cat_year_map}},
+            upsert=True
+        )
+        corpus_totals["category_years"] = cat_year_map
+        return cat_year_map
+    except Exception as e:
+        print(f"Warning: Failed to load category_year_totals: {e}")
+        return {}
+
+
 def map_to_primary_category(cat: str) -> str:
     """
     Map raw category string to one of the 9 Primary Canonical Categories.
@@ -248,6 +288,244 @@ def map_to_criticism(doc: dict) -> Criticism:
         artist_percentages=artist_percentages,
         found_concepts=found_concepts,
         concept_snippets=concept_snippets
+    )
+
+
+async def aggregate_filtered_word_count(
+    word: str,
+    clean_cat: Optional[str],
+    clean_art: Optional[str],
+    corpus_totals: dict,
+    cat_year_totals: dict
+) -> WordCount:
+    match_conditions = [{"Found_Concepts": word}]
+    if clean_cat:
+        if clean_cat in PRIMARY_CATEGORIES:
+            match_conditions.append({"PrimaryCategory": clean_cat})
+        else:
+            match_conditions.append({
+                "$or": [
+                    {"PrimaryCategory": clean_cat},
+                    {"Category": {"$regex": map_category_to_regex(clean_cat), "$options": "i"}}
+                ]
+            })
+
+    if clean_art:
+        art_pat = re.escape(clean_art)
+        match_conditions.append({
+            "$or": [
+                {"ArtistsList": {"$regex": art_pat, "$options": "i"}},
+                {f"LLM_Artists_Percentages.{clean_art}": {"$exists": True}}
+            ]
+        })
+
+    match_stage = {"$and": match_conditions} if len(match_conditions) > 1 else match_conditions[0]
+
+    pipeline = [
+        {"$match": match_stage},
+        {"$facet": {
+            "total": [{"$count": "count"}],
+            "years": [
+                {"$match": {"Year": {"$ne": None}}},
+                {"$group": {"_id": "$Year", "count": {"$sum": 1}}},
+                {"$sort": {"_id": 1}}
+            ],
+            "categories": [
+                {"$match": {"PrimaryCategory": {"$ne": None}}},
+                {"$group": {"_id": "$PrimaryCategory", "count": {"$sum": 1}}}
+            ],
+            "sentiments": [
+                {"$match": {"PrimarySentiment": {"$ne": None}}},
+                {"$group": {"_id": "$PrimarySentiment", "count": {"$sum": 1}}}
+            ],
+            "artists": [
+                {"$match": {"ArtistsList": {"$exists": True, "$ne": []}}},
+                {"$project": {"ArtistsList": 1}},
+                {"$unwind": "$ArtistsList"},
+                {"$group": {"_id": "$ArtistsList", "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}},
+                {"$limit": 15}
+            ]
+        }}
+    ]
+
+    snippet_cursor = criticism_collection.find(
+        match_stage,
+        {
+            "Publication": 1,
+            "Date": 1,
+            "DateStr": 1,
+            "DateEpoch": 1,
+            "Year": 1,
+            "Title": 1,
+            "Author": 1,
+            "Concept_Snippets": 1,
+            "ArtistsList": 1
+        }
+    ).sort("DateEpoch", 1).limit(50)
+
+    agg_task = criticism_collection.aggregate(pipeline).to_list(length=1)
+    snip_task = snippet_cursor.to_list(length=50)
+
+    agg_res, snippet_docs = await asyncio.gather(agg_task, snip_task)
+    facet = agg_res[0] if agg_res else {}
+    total_count = int(facet.get("total", [{}])[0].get("count", 0)) if facet.get("total") else 0
+
+    c_years = corpus_totals.get("years", {})
+    c_cats = corpus_totals.get("categories", {})
+    c_sents = corpus_totals.get("sentiments", {})
+
+    # 1. YearCounts
+    year_counts = []
+    for y_item in facet.get("years", []):
+        yr_raw = y_item["_id"]
+        yr_int = int(yr_raw) if str(yr_raw).isdigit() else 0
+        cnt_val = float(y_item["count"])
+        if clean_cat:
+            tot_yr = cat_year_totals.get(f"{clean_cat}_{yr_int}", 0)
+        else:
+            tot_yr = c_years.get(yr_int, 0)
+
+        norm_c = round((cnt_val / tot_yr) * 100, 3) if tot_yr > 0 else 0.0
+
+        year_counts.append(CountByYear(
+            year=yr_int,
+            count=cnt_val,
+            normalized_count=norm_c,
+            total_records=tot_yr if tot_yr > 0 else None
+        ))
+
+    # 2. CategoryCounts
+    canonical_category_counts = {cat: 0.0 for cat in PRIMARY_CATEGORIES}
+    for c_item in facet.get("categories", []):
+        cat_str = str(c_item["_id"])
+        canonical_cat = map_to_primary_category(cat_str)
+        canonical_category_counts[canonical_cat] = canonical_category_counts.get(canonical_cat, 0.0) + float(c_item["count"])
+
+    category_counts = []
+    for cat in PRIMARY_CATEGORIES:
+        c_raw = round(canonical_category_counts.get(cat, 0.0), 1)
+        pct_val = round((c_raw / total_count) * 100, 2) if total_count > 0 else 0.0
+        tot_cat = c_cats.get(cat, 0)
+        c_norm = round((c_raw / tot_cat) * 100, 3) if tot_cat > 0 else 0.0
+        category_counts.append(CountByCategory(
+            category=cat,
+            count=pct_val,
+            raw_count=c_raw,
+            normalized_count=c_norm,
+            total_records=tot_cat if tot_cat > 0 else None
+        ))
+
+    # 3. SentimentCounts
+    canonical_sentiment_counts = {sent: 0.0 for sent in PRIMARY_SENTIMENTS}
+    for s_item in facet.get("sentiments", []):
+        sent_str = str(s_item["_id"])
+        can_sent = map_to_primary_sentiment(sent_str)
+        canonical_sentiment_counts[can_sent] = canonical_sentiment_counts.get(can_sent, 0.0) + float(s_item["count"])
+
+    sentiment_counts = []
+    for sent in PRIMARY_SENTIMENTS:
+        s_raw = round(canonical_sentiment_counts.get(sent, 0.0), 1)
+        pct_val = round((s_raw / total_count) * 100, 2) if total_count > 0 else 0.0
+        tot_sent = c_sents.get(sent, 0)
+        s_norm = round((s_raw / tot_sent) * 100, 3) if tot_sent > 0 else 0.0
+        sentiment_counts.append(CountBySentiment(
+            sentiment=sent,
+            count=pct_val,
+            raw_count=s_raw,
+            normalized_count=s_norm,
+            total_records=tot_sent if tot_sent > 0 else None
+        ))
+
+    # 4. ArtistCounts
+    artist_counts = []
+    for a_item in facet.get("artists", []):
+        art_name = str(a_item["_id"])
+        art_c = float(a_item["count"])
+        pct = round((art_c / total_count) * 100, 2) if total_count > 0 else 0.0
+        artist_counts.append(CountByArtist(
+            artist=art_name,
+            count=art_c,
+            percentage=pct
+        ))
+
+    # 5. ArtistSnippets
+    artist_snippets_dict = {}
+    for s_doc in snippet_docs:
+        artists = s_doc.get("ArtistsList") or []
+        snips = (s_doc.get("Concept_Snippets") or {}).get(word) or []
+        if isinstance(snips, str):
+            snips = [snips]
+        for art in artists:
+            if art and snips:
+                if art not in artist_snippets_dict:
+                    artist_snippets_dict[art] = []
+                for snip in snips:
+                    if snip not in artist_snippets_dict[art] and len(artist_snippets_dict[art]) < 5:
+                        artist_snippets_dict[art].append(str(snip).strip())
+
+    artist_snippets = [
+        SnippetsByArtist(artist=art, snippets=snips)
+        for art, snips in artist_snippets_dict.items()
+    ]
+
+    # 6. ConceptSnippets
+    concept_snippets = []
+    for s_doc in snippet_docs:
+        cs = (s_doc.get("Concept_Snippets") or {}).get(word) or []
+        if isinstance(cs, str):
+            cs = [cs]
+        yr_val = s_doc.get("Year")
+        if yr_val is not None:
+            try:
+                yr_val = int(yr_val)
+            except Exception:
+                yr_val = None
+
+        era_val = None
+        if yr_val:
+            if yr_val < 1850:
+                era_val = "1785–1849"
+            elif yr_val < 1900:
+                era_val = "1850–1899"
+            elif yr_val < 1950:
+                era_val = "1900–1949"
+            elif yr_val < 1980:
+                era_val = "1950–1979"
+            else:
+                era_val = "1980–2008"
+
+        pub_str = str(s_doc.get("Publication")) if s_doc.get("Publication") else None
+        date_str = str(s_doc.get("DateStr") or s_doc.get("Date") or "") if (s_doc.get("DateStr") or s_doc.get("Date")) else None
+        title_str = str(s_doc.get("Title")) if s_doc.get("Title") else None
+        author_str = str(s_doc.get("Author")) if s_doc.get("Author") else None
+
+        for snip_text in cs:
+            if snip_text and str(snip_text).strip():
+                concept_snippets.append(
+                    ContextSnippet(
+                        snippet=str(snip_text).strip(),
+                        publication=pub_str,
+                        date=date_str,
+                        year=yr_val,
+                        title=title_str,
+                        author=author_str,
+                        era=era_val
+                    )
+                )
+
+    return WordCount(
+        _id=f"{word}_{clean_cat or 'all'}_{clean_art or 'all'}",
+        Word=word,
+        WordConcept=[],
+        TotalCount=total_count,
+        YearCounts=year_counts,
+        CategoryCounts=category_counts,
+        ArtistCounts=artist_counts,
+        ArtistSnippets=artist_snippets,
+        ConceptCounts=[],
+        SentimentCounts=sentiment_counts,
+        ConceptSnippets=concept_snippets
     )
 
 
@@ -489,10 +767,27 @@ class Query:
         return await criticism_collection.estimated_document_count()
 
     @strawberry.field
-    async def word_counts(self, words: List[str]) -> List[WordCount]:
+    async def word_counts(
+        self,
+        words: List[str],
+        category: Optional[str] = None,
+        artist: Optional[str] = None
+    ) -> List[WordCount]:
         cleaned_words = [w.strip().lower() for w in words if w and w.strip()]
         if not cleaned_words:
             return []
+
+        clean_cat = category.strip() if category and category.strip() and category.strip().lower() != "all" else None
+        clean_art = artist.strip() if artist and artist.strip() else None
+
+        if clean_cat or clean_art:
+            corpus_totals = await get_corpus_totals()
+            cat_year_totals = await get_category_year_totals() if clean_cat else {}
+            tasks = [
+                aggregate_filtered_word_count(w, clean_cat, clean_art, corpus_totals, cat_year_totals)
+                for w in cleaned_words
+            ]
+            return await asyncio.gather(*tasks)
 
         cursor = word_collection.find({"Word": {"$in": cleaned_words}})
         results = await cursor.to_list(length=None)

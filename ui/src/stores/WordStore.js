@@ -22,6 +22,8 @@ export const useWordStore = defineStore('Word', {
     hasSearched: false,
     availableConcepts: [],
     isLoadingAvailableConcepts: false,
+    selectedCategory: 'All',
+    selectedArtist: '',
     metricMode: 'normalized', // 'normalized' | 'raw'
     isLoading: false,
     errorMessage: null
@@ -33,6 +35,11 @@ export const useWordStore = defineStore('Word', {
     getWordsLength: (state) => state.words.length,
     getResults: (state) => state.results,
     getMetricMode: (state) => state.metricMode,
+    getSelectedCategory: (state) => state.selectedCategory,
+    getSelectedArtist: (state) => state.selectedArtist,
+    hasActiveFilters: (state) =>
+      (state.selectedCategory && state.selectedCategory !== 'All') ||
+      Boolean(state.selectedArtist && state.selectedArtist.trim()),
   },
 
   actions: {
@@ -42,6 +49,28 @@ export const useWordStore = defineStore('Word', {
 
     setMetricMode(mode) {
       this.metricMode = mode === 'raw' ? 'raw' : 'normalized';
+    },
+
+    setCategory(category) {
+      this.selectedCategory = category || 'All';
+      if (this.hasSearched && this.words.length) {
+        this.searchExpressions();
+      }
+    },
+
+    setArtist(artist) {
+      this.selectedArtist = artist || '';
+      if (this.hasSearched && this.words.length) {
+        this.searchExpressions();
+      }
+    },
+
+    resetFilters() {
+      this.selectedCategory = 'All';
+      this.selectedArtist = '';
+      if (this.hasSearched && this.words.length) {
+        this.searchExpressions();
+      }
     },
 
     searchWords(words) {
@@ -73,8 +102,8 @@ export const useWordStore = defineStore('Word', {
       this.hasSearched = true;
 
       const query = `
-        query GetWordCounts($words: [String!]!) {
-          wordCounts(words: $words) {
+        query GetWordCounts($words: [String!]!, $category: String, $artist: String) {
+          wordCounts(words: $words, category: $category, artist: $artist) {
             Word
             TotalCount
             WordConcept
@@ -133,7 +162,11 @@ export const useWordStore = defineStore('Word', {
           },
           body: JSON.stringify({
             query,
-            variables: { words: parsedWords }
+            variables: {
+              words: parsedWords,
+              category: this.selectedCategory !== 'All' ? this.selectedCategory : null,
+              artist: this.selectedArtist.trim() || null
+            }
           }),
         });
 
@@ -148,8 +181,17 @@ export const useWordStore = defineStore('Word', {
         this.missingWords = missing;
         this.setResults(foundResults);
 
-        if (foundResults.length === 0) {
-          if (parsedWords.length === 1) {
+        if (foundResults.length === 0 || foundResults.every((r) => r.TotalCount === 0)) {
+          const filterDetails = [];
+          if (this.selectedCategory && this.selectedCategory !== 'All') {
+            filterDetails.push(`Artform: ${this.selectedCategory}`);
+          }
+          if (this.selectedArtist && this.selectedArtist.trim()) {
+            filterDetails.push(`Artist: ${this.selectedArtist.trim()}`);
+          }
+          if (filterDetails.length) {
+            this.errorMessage = `No records found for concept(s) ${parsedWords.map((w) => `"${w}"`).join(', ')} matching active filter (${filterDetails.join(', ')}).`;
+          } else if (parsedWords.length === 1) {
             this.errorMessage = `Concept "${parsedWords[0]}" was not found in the 273 curated aesthetic vocabulary concepts.`;
           } else {
             this.errorMessage = `None of the searched concepts (${parsedWords.map((w) => `"${w}"`).join(', ')}) were found in the 273 curated aesthetic vocabulary concepts.`;
@@ -173,6 +215,8 @@ export const useWordStore = defineStore('Word', {
       this.words = [];
       this.results = [];
       this.missingWords = [];
+      this.selectedCategory = 'All';
+      this.selectedArtist = '';
       this.hasSearched = false;
       this.errorMessage = null;
     },

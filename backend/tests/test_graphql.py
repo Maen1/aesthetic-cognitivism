@@ -92,6 +92,84 @@ class TestGraphQLSchema(unittest.TestCase):
             self.assertGreater(len(concepts), 0)
             self.assertTrue(any(c["word"] == "sublime" for c in concepts))
 
+            # --- wordCounts queries ---
+            # 1. Unfiltered query
+            res_unfiltered = await schema.execute("""
+                query {
+                    wordCounts(words: ["sublime"]) {
+                        Word
+                        TotalCount
+                        YearCounts {
+                            year
+                            count
+                        }
+                        CategoryCounts {
+                            category
+                            count
+                        }
+                    }
+                }
+            """)
+            self.assertIsNone(res_unfiltered.errors)
+            self.assertIsNotNone(res_unfiltered.data)
+            wc_unfiltered = res_unfiltered.data["wordCounts"]
+            self.assertEqual(len(wc_unfiltered), 1)
+            total_unfiltered = wc_unfiltered[0]["TotalCount"]
+            self.assertGreater(total_unfiltered, 0)
+
+            # 2. Filtered by category (Concerts & Music)
+            res_cat = await schema.execute("""
+                query {
+                    wordCounts(words: ["sublime"], category: "Concerts & Music") {
+                        Word
+                        TotalCount
+                        YearCounts {
+                            year
+                            count
+                            normalizedCount
+                        }
+                        ArtistCounts {
+                            artist
+                            count
+                        }
+                        ConceptSnippets {
+                            snippet
+                            publication
+                            year
+                            era
+                        }
+                    }
+                }
+            """)
+            self.assertIsNone(res_cat.errors)
+            self.assertIsNotNone(res_cat.data)
+            wc_cat = res_cat.data["wordCounts"]
+            self.assertEqual(len(wc_cat), 1)
+            total_cat = wc_cat[0]["TotalCount"]
+            self.assertGreater(total_cat, 0)
+            self.assertLessEqual(total_cat, total_unfiltered)
+            self.assertTrue(len(wc_cat[0]["YearCounts"]) > 0)
+            self.assertTrue(len(wc_cat[0]["ArtistCounts"]) > 0)
+
+            # 3. Filtered by artist (Beethoven)
+            res_art = await schema.execute("""
+                query {
+                    wordCounts(words: ["sublime"], artist: "Beethoven") {
+                        Word
+                        TotalCount
+                        CategoryCounts {
+                            category
+                            count
+                        }
+                    }
+                }
+            """)
+            self.assertIsNone(res_art.errors)
+            self.assertIsNotNone(res_art.data)
+            wc_art = res_art.data["wordCounts"]
+            self.assertEqual(len(wc_art), 1)
+            self.assertGreater(wc_art[0]["TotalCount"], 0)
+
         import asyncio
         asyncio.run(run_queries())
 
@@ -100,6 +178,11 @@ class TestGraphQLSchema(unittest.TestCase):
         sdl = str(schema)
         self.assertIn("availableConcepts: [ConceptItem!]!", sdl)
         self.assertIn("type ConceptItem", sdl)
+
+    def test_schema_has_word_counts_filter_parameters(self):
+        schema = strawberry.Schema(query=Query)
+        sdl = str(schema)
+        self.assertIn("wordCounts(words: [String!]!, category: String = null, artist: String = null): [WordCount!]!", sdl)
 
 
 

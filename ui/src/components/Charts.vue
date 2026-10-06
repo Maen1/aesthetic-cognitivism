@@ -450,6 +450,18 @@ const renderCharts = () => {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (_event, elements, chart) => {
+        if (!elements?.length) return;
+        const index = elements[0].index;
+        const clickedCat = chart.data.labels?.[index];
+        if (clickedCat) {
+          if (store.selectedCategory === clickedCat) {
+            store.setCategory('All');
+          } else {
+            store.setCategory(clickedCat);
+          }
+        }
+      },
       plugins: {
         legend: { position: 'top' },
         tooltip: {
@@ -645,6 +657,18 @@ const renderModalChart = async () => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        onClick: (_event, elements, chart) => {
+          if (!elements?.length) return;
+          const index = elements[0].index;
+          const clickedCat = chart.data.labels?.[index];
+          if (clickedCat) {
+            if (store.selectedCategory === clickedCat) {
+              store.setCategory('All');
+            } else {
+              store.setCategory(clickedCat);
+            }
+          }
+        },
         plugins: {
           legend: { position: 'top', labels: { font: { size: 13, weight: 'bold' } } },
           tooltip: {
@@ -949,9 +973,17 @@ const modalSubtitle = computed(() => {
       <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4 relative group">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
-            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>📈 Expression Timeline</span>
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>📈 Expression Timeline</span>
+              </h3>
+              <span
+                v-if="store.hasActiveFilters"
+                class="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-semibold border border-sky-200"
+              >
+                Filtered: {{ [store.selectedCategory !== 'All' ? store.selectedCategory : '', store.selectedArtist].filter(Boolean).join(' · ') }}
+              </span>
+            </div>
             <span class="text-xs text-slate-400">
               {{ isNormalized ? 'Rate per 100 records by year (1785–2008)' : 'Historical mentions by year (1785–2008)' }}
             </span>
@@ -978,11 +1010,20 @@ const modalSubtitle = computed(() => {
       <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4 relative group">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
-            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>🎨 Artistic Categories</span>
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>🎨 Artistic Categories</span>
+              </h3>
+              <span
+                v-if="store.selectedCategory && store.selectedCategory !== 'All'"
+                class="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-semibold border border-sky-200"
+              >
+                Focus: {{ store.selectedCategory }}
+              </span>
+            </div>
             <span class="text-xs text-slate-400">
               {{ isNormalized ? 'Rate per 100 records within each cultural category' : 'Distribution across 9 primary categories' }}
+              <span class="text-slate-400 hidden sm:inline">&middot; Click any bar to filter</span>
             </span>
           </div>
 
@@ -1007,9 +1048,17 @@ const modalSubtitle = computed(() => {
       <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4 relative group">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
-            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>💭 Sentiment Distribution</span>
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>💭 Sentiment Distribution</span>
+              </h3>
+              <span
+                v-if="store.hasActiveFilters"
+                class="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-semibold border border-sky-200"
+              >
+                Filtered
+              </span>
+            </div>
             <span class="text-xs text-slate-400">
               {{ isNormalized ? 'Rate per 100 records within each sentiment' : 'Positive, Neutral, Negative & Mixed' }}
             </span>
@@ -1036,9 +1085,23 @@ const modalSubtitle = computed(() => {
       <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4 relative group">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
-            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>🎭 Artist Associations & Percentages</span>
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>🎭 Artist Associations &amp; Percentages</span>
+              </h3>
+              <span
+                v-if="store.selectedArtist && store.selectedArtist.trim()"
+                class="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-semibold border border-sky-200"
+              >
+                Filtered: {{ store.selectedArtist }}
+              </span>
+              <span
+                v-else-if="store.selectedCategory && store.selectedCategory !== 'All'"
+                class="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-semibold border border-sky-200"
+              >
+                Top in {{ store.selectedCategory }}
+              </span>
+            </div>
             <span class="text-xs text-slate-400">Top artists critiqued with this concept</span>
           </div>
 
@@ -1075,16 +1138,27 @@ const modalSubtitle = computed(() => {
           </p>
 
           <div v-if="selectedWord" class="pt-2 border-t border-slate-200 space-y-2">
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between flex-wrap gap-2">
               <p class="text-xs font-bold text-slate-800">
                 Snippets for {{ selectedArtist }} &middot; #{{ selectedWord }} ({{ selectedCount }} mentions{{ selectedPercentage ? ', ' + selectedPercentage : '' }})
               </p>
-              <button
-                @click="selectedWord = ''"
-                class="text-[10px] text-slate-500 hover:text-slate-800 font-semibold"
-              >
-                ✕ Clear
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  v-if="store.selectedArtist.toLowerCase() !== selectedArtist.toLowerCase()"
+                  type="button"
+                  @click="store.setArtist(selectedArtist)"
+                  class="text-[11px] bg-sky-600 hover:bg-sky-500 text-white font-semibold px-2 py-0.5 rounded-md transition-colors shadow-xs"
+                  title="Filter all analytical charts to this artist"
+                >
+                  Filter Analysis by {{ selectedArtist }}
+                </button>
+                <button
+                  @click="selectedWord = ''"
+                  class="text-[10px] text-slate-500 hover:text-slate-800 font-semibold"
+                >
+                  ✕ Clear
+                </button>
+              </div>
             </div>
             <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
               <p
@@ -1106,9 +1180,17 @@ const modalSubtitle = computed(() => {
     <div v-if="results.length" class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div>
-          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
-            <span>📖 Contextual Concept Snippets</span>
-          </h3>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+              <span>📖 Contextual Concept Snippets</span>
+            </h3>
+            <span
+              v-if="store.hasActiveFilters"
+              class="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-semibold border border-sky-200"
+            >
+              Filtered: {{ [store.selectedCategory !== 'All' ? store.selectedCategory : '', store.selectedArtist].filter(Boolean).join(' · ') }}
+            </span>
+          </div>
           <p class="text-xs text-slate-500">
             Representative sentences extracted from historical reviews where the searched concept appears.
           </p>

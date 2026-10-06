@@ -99,6 +99,64 @@ const pickExample = (word) => {
   searchExpressions();
 };
 
+// 8 Primary Canonical Category Groups + All
+const primaryCategories = [
+  { label: 'All Categories', value: 'All', icon: '🌐' },
+  { label: 'Theater & Drama', value: 'Theater & Drama', icon: '🎭' },
+  { label: 'Concerts & Music', value: 'Concerts & Music', icon: '🎵' },
+  { label: 'Art & Exhibitions', value: 'Art & Exhibitions', icon: '🖼️' },
+  { label: 'Films & Cinema', value: 'Films & Cinema', icon: '🎬' },
+  { label: 'Opera', value: 'Opera', icon: '🎼' },
+  { label: 'Dance & Ballet', value: 'Dance & Ballet', icon: '🩰' },
+  { label: 'Poetry & Literature', value: 'Poetry & Literature', icon: '📜' },
+  { label: 'Television & Radio', value: 'Television & Radio', icon: '📺' },
+  { label: 'Multiple / Other', value: 'Multiple / Other', icon: '✨' }
+];
+
+const popularArtists = ['Shakespeare', 'Beethoven', 'Mozart', 'Bach', 'Picasso', 'Wagner', 'Brahms', 'Pinter'];
+
+const artistInput = ref(store.selectedArtist || '');
+
+watch(
+  () => store.selectedArtist,
+  (newVal) => {
+    if (newVal !== artistInput.value) {
+      artistInput.value = newVal || '';
+    }
+  }
+);
+
+let artistDebounceTimer = null;
+const handleArtistInputDebounced = () => {
+  clearTimeout(artistDebounceTimer);
+  artistDebounceTimer = setTimeout(() => {
+    store.setArtist(artistInput.value);
+  }, 400);
+};
+
+const clearArtist = () => {
+  artistInput.value = '';
+  store.setArtist('');
+};
+
+const selectPopularArtist = (artistName) => {
+  if (artistInput.value.toLowerCase() === artistName.toLowerCase()) {
+    clearArtist();
+  } else {
+    artistInput.value = artistName;
+    store.setArtist(artistName);
+  }
+};
+
+const selectCategory = (cat) => {
+  store.setCategory(cat);
+};
+
+const resetAllFilters = () => {
+  artistInput.value = '';
+  store.resetFilters();
+};
+
 const handleGlobalClick = (event) => {
   if (dropdownRef.value && !dropdownRef.value.contains(event.target)) {
     isDropdownOpen.value = false;
@@ -351,6 +409,114 @@ onUnmounted(() => {
           >
             Clear all
           </button>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- ANALYTICS SCOPE FILTERS (ARTFORM & ARTIST) -->
+        <!-- ======================================================== -->
+        <div class="bg-slate-50/90 rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 space-y-3 shadow-xs">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="font-bold text-slate-800">🔍 Filter Analytics Scope</span>
+              <span class="text-[11px] text-slate-400 font-normal hidden sm:inline">(Optional domain &amp; creator filters)</span>
+            </div>
+            <button
+              v-if="store.hasActiveFilters"
+              type="button"
+              @click="resetAllFilters"
+              class="text-xs text-rose-600 hover:text-rose-800 font-semibold flex items-center gap-1 transition-colors bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200/80"
+            >
+              <span>✕ Clear Filters</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Artform Filter -->
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">
+                🎨 Filter by Artform:
+              </label>
+              <div class="relative">
+                <select
+                  :value="store.selectedCategory"
+                  @change="selectCategory($event.target.value)"
+                  class="w-full text-xs rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-800 shadow-xs focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-medium cursor-pointer"
+                >
+                  <option
+                    v-for="cat in primaryCategories"
+                    :key="cat.value"
+                    :value="cat.value"
+                  >
+                    {{ cat.icon }} {{ cat.label }}
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Artist Filter -->
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">
+                👤 Filter by Artist:
+              </label>
+              <div class="relative">
+                <input
+                  type="text"
+                  v-model="artistInput"
+                  @input="handleArtistInputDebounced"
+                  placeholder="e.g. Shakespeare, Beethoven, Mozart..."
+                  class="w-full text-xs rounded-xl border border-slate-300 bg-white pl-3 pr-8 py-2 text-slate-800 placeholder:text-slate-400 shadow-xs focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-medium"
+                />
+                <button
+                  v-if="artistInput"
+                  type="button"
+                  @click="clearArtist"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold px-1"
+                  title="Clear artist filter"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Popular Artist Quick Chips -->
+          <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span class="text-[11px] text-slate-400 mr-0.5">Popular Creators:</span>
+            <button
+              v-for="art in popularArtists"
+              :key="art"
+              type="button"
+              @click="selectPopularArtist(art)"
+              class="text-[11px] px-2 py-0.5 rounded-lg transition-all font-medium border"
+              :class="store.selectedArtist.toLowerCase() === art.toLowerCase()
+                ? 'bg-sky-600 text-white border-sky-600 shadow-xs font-semibold'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-800'"
+            >
+              {{ art }}
+            </button>
+          </div>
+
+          <!-- Active Filter Pill Badges Indicator -->
+          <div v-if="store.hasActiveFilters" class="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200/60">
+            <span class="text-[11px] font-semibold text-sky-900">Active Scope:</span>
+            <span
+              v-if="store.selectedCategory && store.selectedCategory !== 'All'"
+              class="inline-flex items-center gap-1 text-[11px] bg-sky-100 text-sky-800 font-semibold px-2 py-0.5 rounded-md border border-sky-200 shadow-xs"
+            >
+              <span>🎨 {{ store.selectedCategory }}</span>
+              <button type="button" @click="store.setCategory('All')" class="hover:text-sky-950 font-bold ml-0.5">&times;</button>
+            </span>
+            <span
+              v-if="store.selectedArtist && store.selectedArtist.trim()"
+              class="inline-flex items-center gap-1 text-[11px] bg-sky-100 text-sky-800 font-semibold px-2 py-0.5 rounded-md border border-sky-200 shadow-xs"
+            >
+              <span>👤 {{ store.selectedArtist }}</span>
+              <button type="button" @click="clearArtist" class="hover:text-sky-950 font-bold ml-0.5">&times;</button>
+            </span>
+            <span class="text-[10px] text-slate-500 italic ml-1">
+              (Showing filtered analytical slice)
+            </span>
+          </div>
         </div>
 
         <!-- Not Found / Error Banner -->
