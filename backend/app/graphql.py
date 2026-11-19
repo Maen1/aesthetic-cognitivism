@@ -493,7 +493,7 @@ async def aggregate_filtered_word_count(
             elif yr_val < 1980:
                 era_val = "1950–1979"
             else:
-                era_val = "1980–2008"
+                era_val = "1980–2019"
 
         pub_str = str(s_doc.get("Publication")) if s_doc.get("Publication") else None
         date_str = str(s_doc.get("DateStr") or s_doc.get("Date") or "") if (s_doc.get("DateStr") or s_doc.get("Date")) else None
@@ -551,7 +551,7 @@ class Query:
             corpus_totals = await get_corpus_totals()
             years = [int(y) for y in corpus_totals.get("years", {}).keys() if str(y).isdigit() and 1700 <= int(y) <= 2050]
             min_yr = min(years) if years else 1785
-            max_yr = max(years) if years else 2008
+            max_yr = max(years) if years else 2019
             return FilterMetadata(
                 categories=PRIMARY_CATEGORIES,
                 sentiments=PRIMARY_SENTIMENTS,
@@ -561,7 +561,7 @@ class Query:
             )
         except Exception as e:
             print(f"Error fetching filter metadata: {e}")
-            return FilterMetadata(categories=[], sentiments=[], total_criticisms=0, min_year=1785, max_year=2008)
+            return FilterMetadata(categories=[], sentiments=[], total_criticisms=0, min_year=1785, max_year=2019)
 
     @strawberry.field
     async def available_concepts(self) -> List[ConceptItem]:
@@ -939,7 +939,7 @@ class Query:
                         elif yr_val < 1980:
                             era_val = "1950–1979"
                         else:
-                            era_val = "1980–2008"
+                            era_val = "1980–2019"
 
                     concept_snippets.append(
                         ContextSnippet(

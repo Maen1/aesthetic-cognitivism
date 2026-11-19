@@ -124,7 +124,7 @@ class TestIngestPipeline(unittest.TestCase):
         self.assertEqual(beautiful["ConceptSnippets"][0]["date"], "1995-07-29")
         self.assertEqual(beautiful["ConceptSnippets"][0]["year"], 1995)
 
-        self.assertEqual(beautiful["ConceptSnippets"][0]["era"], "1980–2008")
+        self.assertEqual(beautiful["ConceptSnippets"][0]["era"], "1980–2019")
 
         # Normalized per 100 records assertions
         self.assertEqual(beautiful["YearCountsNormalized"]["1995"], 100.0)
@@ -180,7 +180,7 @@ class TestIngestPipeline(unittest.TestCase):
                 "ArtistsList": ["Kubrick"],
                 "Concept_Snippets": {"sublime": ["A sublime visual journey from 1968"]}
             },
-            # Era 5: 1980–2008
+            # Era 5: 1980–2019
             {
                 "Found_Concepts": ["sublime"],
                 "Category": "Concerts",
@@ -207,7 +207,7 @@ class TestIngestPipeline(unittest.TestCase):
         self.assertEqual(snippets[1]["era"], "1850–1899")
         self.assertEqual(snippets[2]["era"], "1900–1949")
         self.assertEqual(snippets[3]["era"], "1950–1979")
-        self.assertEqual(snippets[4]["era"], "1980–2008")
+        self.assertEqual(snippets[4]["era"], "1980–2019")
 
 
 if __name__ == "__main__":

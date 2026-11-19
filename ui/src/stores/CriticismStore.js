@@ -32,7 +32,7 @@ export const useCriticismStore = defineStore('Criticism', {
       sentiments: [],
       totalCriticisms: 0,
       minYear: 1785,
-      maxYear: 2008
+      maxYear: 2019
     },
     isLoading: false,
     errorMessage: null,

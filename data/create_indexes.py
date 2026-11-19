@@ -229,7 +229,7 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
         {"label": "1850–1899", "sub_ranges": [(1850, 1875), (1875, 1900)]},
         {"label": "1900–1949", "sub_ranges": [(1900, 1925), (1925, 1950)]},
         {"label": "1950–1979", "sub_ranges": [(1950, 1965), (1965, 1980)]},
-        {"label": "1980–2008", "sub_ranges": [(1980, 1995), (1995, 2015)]},
+        {"label": "1980–2019", "sub_ranges": [(1980, 1998), (1998, 2025)]},
     ]
     TARGET_PER_ERA = 10
     TOTAL_TARGET = 50
@@ -245,7 +245,7 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
             return "1900–1949"
         if year < 1980:
             return "1950–1979"
-        return "1980–2008"
+        return "1980–2019"
 
     snippet_batch = []
     words_in_db = [doc["_id"] for doc in word_col.find({}, {"_id": 1})]
@@ -344,6 +344,7 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
         ([("PrimaryCategory", ASCENDING), ("PrimarySentiment", ASCENDING), ("DateEpoch", DESCENDING)], {}),
         ([("PrimarySentiment", ASCENDING), ("DateEpoch", DESCENDING)], {}),
         ([("Found_Concepts", ASCENDING), ("DateEpoch", DESCENDING)], {}),
+        ([("Found_Concepts", ASCENDING), ("PrimaryCategory", ASCENDING)], {}),
         ([("ArtistsList", ASCENDING), ("DateEpoch", DESCENDING)], {}),
         ([("Author", ASCENDING), ("DateEpoch", DESCENDING)], {}),
         ([("Year", ASCENDING), ("DateEpoch", DESCENDING)], {}),

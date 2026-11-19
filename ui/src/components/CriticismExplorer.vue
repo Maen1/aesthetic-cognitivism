@@ -14,12 +14,12 @@ const selectedConceptSnippet = ref(null);
 const expandedTextId = ref(null);
 
 const historicalEras = [
-  { label: 'All Years', subtitle: '1785–2008', start: null, end: null, icon: '🌐' },
+  { label: 'All Years', subtitle: '1785–2019', start: null, end: null, icon: '🌐' },
   { label: '1785–1849', subtitle: 'Romanticism', start: 1785, end: 1849, icon: '🏛️' },
   { label: '1850–1899', subtitle: 'Victorian', start: 1850, end: 1899, icon: '🎩' },
   { label: '1900–1949', subtitle: 'Modernism', start: 1900, end: 1949, icon: '📻' },
   { label: '1950–1979', subtitle: 'Post-war', start: 1950, end: 1979, icon: '📺' },
-  { label: '1980–2008', subtitle: 'Contemporary', start: 1980, end: 2008, icon: '💻' }
+  { label: '1980–2019', subtitle: 'Contemporary', start: 1980, end: 2019, icon: '💻' }
 ];
 
 const isEraActive = (era) => {
@@ -51,8 +51,8 @@ const clearYearRange = () => {
 };
 
 const sortOptions = [
-  { label: '🗓️ Newest First (2008 → 1785)', value: 'date_desc' },
-  { label: '⏳ Oldest First (1785 → 2008)', value: 'date_asc' },
+  { label: '🗓️ Newest First (2019 → 1785)', value: 'date_desc' },
+  { label: '⏳ Oldest First (1785 → 2019)', value: 'date_asc' },
   { label: '🔤 Title (A → Z)', value: 'title_asc' },
   { label: '🔤 Title (Z → A)', value: 'title_desc' },
   { label: '✍️ Critic / Author (A → Z)', value: 'author_asc' },
@@ -66,7 +66,7 @@ const handleSortChange = () => {
 
 const minBound = computed(() => store.filterMetadata.minYear || 1785);
 
-const maxBound = computed(() => store.filterMetadata.maxYear || 2008);
+const maxBound = computed(() => store.filterMetadata.maxYear || 2019);
 
 const sliderMin = computed({
   get: () => {
@@ -273,7 +273,7 @@ onMounted(() => {
             <span>📰 Criticism Catalog & Explorer</span>
           </h2>
           <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Filter through 294,000+ historical reviews with LLM summaries, weighted artist mentions, and contextual concepts.
+            Filter through 440,000+ historical reviews with LLM summaries, weighted artist mentions, and contextual concepts.
           </p>
         </div>
         <button
@@ -326,7 +326,7 @@ onMounted(() => {
           <div class="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
             <span>🗓️ Publication Year Range:</span>
             <span v-if="store.startYear || store.endYear" class="text-sky-600 font-bold lowercase tracking-normal text-xs">
-              ({{ store.startYear || store.filterMetadata.minYear || 1785 }} – {{ store.endYear || store.filterMetadata.maxYear || 2008 }})
+              ({{ store.startYear || store.filterMetadata.minYear || 1785 }} – {{ store.endYear || store.filterMetadata.maxYear || 2019 }})
             </span>
           </div>
 
@@ -488,7 +488,7 @@ onMounted(() => {
             v-if="store.startYear || store.endYear"
             class="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 text-xs px-2 py-0.5 rounded-full font-semibold"
           >
-            <span>🗓️ {{ store.startYear || '1785' }} &ndash; {{ store.endYear || '2008' }}</span>
+            <span>🗓️ {{ store.startYear || '1785' }} &ndash; {{ store.endYear || '2019' }}</span>
             <button @click="clearYearRange" class="hover:text-sky-900 ml-0.5 text-[11px]">&times;</button>
           </span>
         </div>

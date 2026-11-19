@@ -21,8 +21,8 @@ const selectedCount = ref('');
 const selectedPercentage = ref('');
 const selectedSnippets = ref([]);
 const activeConceptSnippetTab = ref('');
-const snippetSortOrder = ref('asc'); // 'asc' = oldest first (1785 → 2008), 'desc' = newest first
-const activeSnippetEra = ref('all'); // 'all' | '1785–1849' | '1850–1899' | '1900–1949' | '1950–1979' | '1980–2008'
+const snippetSortOrder = ref('asc'); // 'asc' = oldest first (1785 → 2019), 'desc' = newest first
+const activeSnippetEra = ref('all'); // 'all' | '1785–1849' | '1850–1899' | '1900–1949' | '1950–1979' | '1980–2019'
 
 // Modal Expand State
 const expandedChart = ref(null); // 'timeline' | 'category' | 'sentiment' | 'artist' | null
@@ -62,7 +62,7 @@ const getSnippetEra = (s) => {
   if (yr < 1900) return '1850–1899';
   if (yr < 1950) return '1900–1949';
   if (yr < 1980) return '1950–1979';
-  return '1980–2008';
+  return '1980–2019';
 };
 
 const getEraBadgeInfo = (era) => {
@@ -75,6 +75,7 @@ const getEraBadgeInfo = (era) => {
       return { label: 'Modernism / Interwar', icon: '📻', bg: 'bg-emerald-100/90 text-emerald-800 border-emerald-200' };
     case '1950–1979':
       return { label: 'Post-war / Mid-Century', icon: '📺', bg: 'bg-sky-100/90 text-sky-800 border-sky-200' };
+    case '1980–2019':
     case '1980–2008':
       return { label: 'Contemporary / Turn of Century', icon: '💻', bg: 'bg-purple-100/90 text-purple-800 border-purple-200' };
     default:
@@ -133,7 +134,7 @@ const HISTORICAL_ERA_DEFINITIONS = [
   { id: '1850–1899', label: '1850–1899', name: 'Victorian', icon: '🎩' },
   { id: '1900–1949', label: '1900–1949', name: 'Modernism', icon: '📻' },
   { id: '1950–1979', label: '1950–1979', name: 'Post-war', icon: '📺' },
-  { id: '1980–2008', label: '1980–2008', name: 'Contemporary', icon: '💻' },
+  { id: '1980–2019', label: '1980–2019', name: 'Contemporary', icon: '💻' },
 ];
 
 const availableSnippetEras = computed(() => {
@@ -836,7 +837,7 @@ watch(
 );
 
 const modalTitle = computed(() => {
-  if (expandedChart.value === 'timeline') return '📈 Expression Timeline (1785–2008)';
+  if (expandedChart.value === 'timeline') return '📈 Expression Timeline (1785–2019)';
   if (expandedChart.value === 'category') return '🎨 Artistic Categories Distribution';
   if (expandedChart.value === 'sentiment') return '💭 Sentiment Breakdown';
   if (expandedChart.value === 'artist') return '🎭 Artist Associations & Percentages';
@@ -848,8 +849,8 @@ const modalSubtitle = computed(() => {
   const isNorm = store.getMetricMode === 'normalized';
   if (expandedChart.value === 'timeline') {
     return isNorm
-      ? 'Historical frequency rate per 100 archive records (1785–2008).'
-      : 'Historical raw mention volume across 200+ years of criticism.';
+      ? 'Historical frequency rate per 100 archive records (1785–2019).'
+      : 'Historical raw mention volume across 230+ years of criticism.';
   }
   if (expandedChart.value === 'category') {
     return isNorm
@@ -985,7 +986,7 @@ const modalSubtitle = computed(() => {
               </span>
             </div>
             <span class="text-xs text-slate-400">
-              {{ isNormalized ? 'Rate per 100 records by year (1785–2008)' : 'Historical mentions by year (1785–2008)' }}
+              {{ isNormalized ? 'Rate per 100 records by year (1785–2019)' : 'Historical mentions by year (1785–2019)' }}
             </span>
           </div>
 
@@ -1237,7 +1238,7 @@ const modalSubtitle = computed(() => {
             <button
               @click="toggleSnippetSort"
               class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs"
-              :title="snippetSortOrder === 'asc' ? 'Oldest first (1785 → 2008). Click to sort Newest first.' : 'Newest first (2008 → 1785). Click to sort Oldest first.'"
+              :title="snippetSortOrder === 'asc' ? 'Oldest first (1785 → 2019). Click to sort Newest first.' : 'Newest first (2019 → 1785). Click to sort Oldest first.'"
             >
               <span>{{ snippetSortOrder === 'asc' ? '⏳ Oldest first' : '⌛ Newest first' }}</span>
             </button>
@@ -1379,7 +1380,7 @@ const modalSubtitle = computed(() => {
                 <button
                   @click="toggleSnippetSort"
                   class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
-                  :title="snippetSortOrder === 'asc' ? 'Oldest first (1785 → 2008). Click to sort Newest first.' : 'Newest first (2008 → 1785). Click to sort Oldest first.'"
+                  :title="snippetSortOrder === 'asc' ? 'Oldest first (1785 → 2019). Click to sort Newest first.' : 'Newest first (2019 → 1785). Click to sort Oldest first.'"
                 >
                   <span>{{ snippetSortOrder === 'asc' ? '⏳ Oldest first' : '⌛ Newest first' }}</span>
                 </button>

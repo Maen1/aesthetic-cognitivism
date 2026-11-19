@@ -197,7 +197,7 @@ HISTORICAL_ERAS = [
     {"label": "1850–1899", "min": 1850, "max": 1900},
     {"label": "1900–1949", "min": 1900, "max": 1950},
     {"label": "1950–1979", "min": 1950, "max": 1980},
-    {"label": "1980–2008", "min": 1980, "max": 2015},
+    {"label": "1980–2019", "min": 1980, "max": 2025},
 ]
 
 
@@ -209,7 +209,7 @@ def get_era_label(year):
             return era["label"]
     if year < 1785:
         return "Pre-1785"
-    return "Post-2008"
+    return "Post-2019"
 
 
 def update_word_aggregates(doc, total_counts, year_counts, category_counts, sentiment_counts, artist_counts, artist_snippets, concept_snippets_agg):
@@ -467,11 +467,13 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     db = client[db_name]
     criticism_col = db["criticism"]
     word_col = db["word_counts"]
+    meta_col = db["corpus_metadata"]
 
     if drop_first:
         print("Dropping existing collections...")
         criticism_col.drop()
         word_col.drop()
+        meta_col.drop()
 
     print(f"Streaming JSONL file: {input_file} (batch size: {batch_size})...")
     criticism_batch = []
@@ -488,6 +490,7 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     corpus_years = defaultdict(int)
     corpus_categories = defaultdict(int)
     corpus_sentiments = defaultdict(int)
+    corpus_cat_years = defaultdict(int)
 
     with open(input_file, "r", encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
@@ -516,12 +519,15 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
                     concept_snippets_agg
                 )
 
-                yr = str(normalized.get("Year") or "Unknown")
+                yr_num = normalized.get("Year")
+                yr = str(yr_num or "Unknown")
                 cat = normalized.get("PrimaryCategory")
                 sent = normalized.get("PrimarySentiment")
                 corpus_years[yr] += 1
                 if cat:
                     corpus_categories[cat] += 1
+                    if yr_num is not None:
+                        corpus_cat_years[f"{cat}_{yr_num}"] += 1
                 if sent:
                     corpus_sentiments[sent] += 1
 
@@ -539,7 +545,6 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
         print(f"  Processed final batch ({total_records} total criticism records).")
 
     # Save corpus metadata
-    meta_col = db["corpus_metadata"]
     meta_col.replace_one(
         {"_id": "corpus_totals"},
         {
@@ -548,6 +553,15 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
             "records_by_year": dict(corpus_years),
             "records_by_category": dict(corpus_categories),
             "records_by_sentiment": dict(corpus_sentiments),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        },
+        upsert=True
+    )
+    meta_col.replace_one(
+        {"_id": "category_year_totals"},
+        {
+            "_id": "category_year_totals",
+            "totals": dict(corpus_cat_years),
             "updated_at": datetime.now(timezone.utc).isoformat()
         },
         upsert=True
@@ -579,6 +593,7 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     criticism_col.create_index([("PrimaryCategory", ASCENDING), ("PrimarySentiment", ASCENDING), ("DateEpoch", DESCENDING)])
     criticism_col.create_index([("PrimarySentiment", ASCENDING), ("DateEpoch", DESCENDING)])
     criticism_col.create_index([("Found_Concepts", ASCENDING), ("DateEpoch", DESCENDING)])
+    criticism_col.create_index([("Found_Concepts", ASCENDING), ("PrimaryCategory", ASCENDING)])
     criticism_col.create_index([("ArtistsList", ASCENDING), ("DateEpoch", DESCENDING)])
     criticism_col.create_index([("Author", ASCENDING), ("DateEpoch", DESCENDING)])
     criticism_col.create_index([("Year", ASCENDING), ("DateEpoch", DESCENDING)])
@@ -596,9 +611,9 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
 
 
 def main():
-    default_input = os.path.join(os.path.dirname(__file__), "final_analyzed_critics2_updated.jsonl")
+    default_input = os.path.join(os.path.dirname(__file__), "final_analyzed_critics_combined.jsonl")
     parser = argparse.ArgumentParser(description="Ingest JSONL dataset for Aesthetic Cognitivism into MongoDB.")
-    parser.add_argument("--input", "-i", default=default_input, help="Path to input .jsonl file (default: final_analyzed_critics2_updated.jsonl)")
+    parser.add_argument("--input", "-i", default=default_input, help="Path to input .jsonl file (default: final_analyzed_critics_combined.jsonl)")
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URL", "mongodb://localhost:27017"), help="MongoDB connection URI")
     parser.add_argument("--db", default="aestheticv3", help="MongoDB database name")
     parser.add_argument("--batch-size", type=int, default=10000, help="Batch size for bulk operations")
