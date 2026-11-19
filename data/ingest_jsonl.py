@@ -468,12 +468,14 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     criticism_col = db["criticism"]
     word_col = db["word_counts"]
     meta_col = db["corpus_metadata"]
+    artists_idx_col = db["artists_index"]
 
     if drop_first:
         print("Dropping existing collections...")
         criticism_col.drop()
         word_col.drop()
         meta_col.drop()
+        artists_idx_col.drop()
 
     print(f"Streaming JSONL file: {input_file} (batch size: {batch_size})...")
     criticism_batch = []
@@ -491,6 +493,7 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     corpus_categories = defaultdict(int)
     corpus_sentiments = defaultdict(int)
     corpus_cat_years = defaultdict(int)
+    all_artist_totals = defaultdict(int)
 
     with open(input_file, "r", encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
@@ -530,6 +533,8 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
                         corpus_cat_years[f"{cat}_{yr_num}"] += 1
                 if sent:
                     corpus_sentiments[sent] += 1
+                for art_name in normalized.get("ArtistsList") or []:
+                    all_artist_totals[art_name] += 1
 
                 total_records += 1
 
@@ -596,6 +601,7 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     criticism_col.create_index([("Found_Concepts", ASCENDING), ("PrimaryCategory", ASCENDING)])
     criticism_col.create_index([("ArtistsList", ASCENDING), ("DateEpoch", DESCENDING)])
     criticism_col.create_index([("Author", ASCENDING), ("DateEpoch", DESCENDING)])
+    criticism_col.create_index([("Title", ASCENDING), ("DateEpoch", DESCENDING)])
     criticism_col.create_index([("Year", ASCENDING), ("DateEpoch", DESCENDING)])
     criticism_col.create_index([
         ("Title", TEXT),
@@ -605,6 +611,25 @@ def ingest_file(input_file, mongo_uri="mongodb://localhost:27017", db_name="aest
     ], name="criticism_text_search")
 
     word_col.create_index([("Word", ASCENDING)], unique=True)
+
+    if all_artist_totals:
+        print(f"Building artists_index directory ({len(all_artist_totals):,} unique artists)...")
+        artists_idx_col.delete_many({})
+        artist_docs = []
+        for a_name, a_cnt in all_artist_totals.items():
+            artist_docs.append({
+                "_id": a_name,
+                "lower": a_name.lower(),
+                "tokens": list(dict.fromkeys(re.findall(r"\w+", a_name.lower()))),
+                "count": a_cnt,
+            })
+            if len(artist_docs) >= 25000:
+                artists_idx_col.insert_many(artist_docs, ordered=False)
+                artist_docs = []
+        if artist_docs:
+            artists_idx_col.insert_many(artist_docs, ordered=False)
+        artists_idx_col.create_index([("tokens", ASCENDING), ("count", DESCENDING)])
+        artists_idx_col.create_index([("count", DESCENDING)])
 
     print(f"✅ Ingestion complete! {total_records} criticisms and {len(word_aggregates)} words stored.")
     return total_records, len(word_aggregates)

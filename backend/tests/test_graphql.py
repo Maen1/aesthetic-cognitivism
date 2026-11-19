@@ -170,6 +170,55 @@ class TestGraphQLSchema(unittest.TestCase):
             self.assertEqual(len(wc_art), 1)
             self.assertGreater(wc_art[0]["TotalCount"], 0)
 
+            # --- Optimized searchCriticisms paths ---
+            res_sc_cat = await schema.execute("""
+                query {
+                    searchCriticisms(category: "Concerts & Music", startYear: 1900, endYear: 1950, pageSize: 5) {
+                        total
+                        items { id year category }
+                    }
+                }
+            """)
+            self.assertIsNone(res_sc_cat.errors)
+            self.assertGreater(res_sc_cat.data["searchCriticisms"]["total"], 0)
+            self.assertEqual(len(res_sc_cat.data["searchCriticisms"]["items"]), 5)
+
+            res_sc_concept = await schema.execute("""
+                query {
+                    searchCriticisms(concept: "Sublime", pageSize: 5) {
+                        total
+                        items { id foundConcepts }
+                    }
+                }
+            """)
+            self.assertIsNone(res_sc_concept.errors)
+            self.assertGreater(res_sc_concept.data["searchCriticisms"]["total"], 0)
+            for it in res_sc_concept.data["searchCriticisms"]["items"]:
+                self.assertIn("sublime", it["foundConcepts"])
+
+            res_sc_art = await schema.execute("""
+                query {
+                    searchCriticisms(artist: "Wagner", pageSize: 5) {
+                        total
+                        items { id title }
+                    }
+                }
+            """)
+            self.assertIsNone(res_sc_art.errors)
+            self.assertGreater(res_sc_art.data["searchCriticisms"]["total"], 0)
+
+            res_sc_broad = await schema.execute("""
+                query {
+                    searchCriticisms(query: "music", pageSize: 5) {
+                        total
+                        items { id title year }
+                    }
+                }
+            """)
+            self.assertIsNone(res_sc_broad.errors)
+            self.assertEqual(res_sc_broad.data["searchCriticisms"]["total"], 2000)
+            self.assertEqual(len(res_sc_broad.data["searchCriticisms"]["items"]), 5)
+
         import asyncio
         asyncio.run(run_queries())
 

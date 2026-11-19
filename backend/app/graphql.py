@@ -1,11 +1,19 @@
 import asyncio
+from datetime import datetime, timezone
 import math
 import re
 from typing import List, Optional
 from bson import ObjectId
 import strawberry
+from strawberry.types import Info
 
-from .database import criticism_collection, word_collection, corpus_metadata_collection
+from .database import (
+    criticism_collection,
+    word_collection,
+    corpus_metadata_collection,
+    artists_index_collection,
+    tokenize_artist_name,
+)
 from .schema import (
     Criticism,
     CriticismSearchResult,
@@ -44,6 +52,91 @@ PRIMARY_SENTIMENTS = [
 ]
 
 _corpus_totals_cache = None
+_artists_index_ready = False
+
+
+async def resolve_artist_filter(artist_query: str, max_artists: int = 60) -> dict:
+    """
+    Resolve a partial or full artist query into an indexed ArtistsList $in filter
+    using the lightweight artists_index collection, falling back to regex if not built yet.
+    """
+    global _artists_index_ready
+    clean_art = artist_query.strip()
+    if not clean_art:
+        return {}
+
+    if not _artists_index_ready:
+        try:
+            doc = await artists_index_collection.find_one({}, {"_id": 1})
+            if doc is not None:
+                _artists_index_ready = True
+        except Exception:
+            pass
+
+    if _artists_index_ready:
+        tokens = tokenize_artist_name(clean_art)
+        if tokens:
+            idx_clauses = []
+            for tok in tokens[:-1]:
+                idx_clauses.append({"tokens": tok})
+            last_tok = tokens[-1]
+            if len(last_tok) >= 2:
+                idx_clauses.append({"tokens": {"$regex": f"^{re.escape(last_tok)}"}})
+            else:
+                idx_clauses.append({"tokens": last_tok})
+
+            idx_query = {"$and": idx_clauses} if len(idx_clauses) > 1 else idx_clauses[0]
+            candidates = await (
+                artists_index_collection.find(idx_query, {"_id": 1, "lower": 1})
+                .sort([("count", -1)])
+                .limit(150)
+                .to_list(length=150)
+            )
+            q_lower = clean_art.lower()
+            matched = [c["_id"] for c in candidates if q_lower in (c.get("lower") or "")]
+            if not matched and len(tokens) > 1:
+                matched = [c["_id"] for c in candidates]
+            matched = matched[:max_artists]
+            if not matched:
+                return {"_id": "__NO_ARTIST_MATCH__"}
+            return {"ArtistsList": {"$in": matched}}
+
+    return {"ArtistsList": {"$regex": re.escape(clean_art), "$options": "i"}}
+
+
+def build_year_epoch_filter(start_year: Optional[int], end_year: Optional[int]) -> Optional[dict]:
+    """Convert inclusive year bounds into UTC millisecond DateEpoch bounds for compound index range scans."""
+    epoch_filter = {}
+    if start_year is not None:
+        epoch_filter["$gte"] = datetime(int(start_year), 1, 1, tzinfo=timezone.utc).timestamp() * 1000.0
+    if end_year is not None:
+        epoch_filter["$lte"] = datetime(int(end_year), 12, 31, 23, 59, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000.0
+    return {"DateEpoch": epoch_filter} if epoch_filter else None
+
+
+def wants_full_text_fields(info: Optional[Info]) -> bool:
+    """Return True if the GraphQL query requested fullText, text, or extractedText on searchCriticisms.items."""
+    if info is None or not getattr(info, "selected_fields", None):
+        return True
+    try:
+        for root_field in info.selected_fields:
+            for sub in getattr(root_field, "selections", []) or []:
+                if getattr(sub, "name", None) == "items":
+                    item_names = {getattr(f, "name", "") for f in getattr(sub, "selections", []) or []}
+                    return bool(item_names & {"fullText", "text", "extractedText"})
+    except Exception:
+        return True
+    return False
+
+
+def compile_text_patterns(query_str: str) -> list[re.Pattern]:
+    """Compile case-insensitive word/phrase regexes approximating MongoDB $text AND/phrase semantics."""
+    phrases = re.findall(r'"([^"]+)"', query_str)
+    remainder = re.sub(r'"[^"]+"', ' ', query_str)
+    terms = [t for t in re.findall(r"\w+", remainder) if t]
+    patterns = [re.compile(r"\b" + re.escape(p.strip()) + r"\b", re.IGNORECASE) for p in phrases if p.strip()]
+    patterns.extend(re.compile(r"\b" + re.escape(t) + r"\b", re.IGNORECASE) for t in terms)
+    return patterns
 
 
 async def get_corpus_totals() -> dict:
@@ -311,13 +404,9 @@ async def aggregate_filtered_word_count(
             })
 
     if clean_art:
-        art_pat = re.escape(clean_art)
-        match_conditions.append({
-            "$or": [
-                {"ArtistsList": {"$regex": art_pat, "$options": "i"}},
-                {f"LLM_Artists_Percentages.{clean_art}": {"$exists": True}}
-            ]
-        })
+        art_filter = await resolve_artist_filter(clean_art)
+        if art_filter:
+            match_conditions.append(art_filter)
 
     match_stage = {"$and": match_conditions} if len(match_conditions) > 1 else match_conditions[0]
 
@@ -582,6 +671,7 @@ class Query:
     @strawberry.field
     async def search_criticisms(
         self,
+        info: Info,
         query: Optional[str] = None,
         artist: Optional[str] = None,
         author: Optional[str] = None,
@@ -596,61 +686,56 @@ class Query:
     ) -> CriticismSearchResult:
         page = max(1, page)
         page_size = max(1, min(100, page_size))
-        filter_clauses = []
+        non_text_clauses = []
 
-        year_filter = {}
-        if start_year is not None:
-            year_filter["$gte"] = int(start_year)
-        if end_year is not None:
-            year_filter["$lte"] = int(end_year)
-        if year_filter:
-            filter_clauses.append({"Year": year_filter})
+        epoch_clause = build_year_epoch_filter(start_year, end_year)
+        if epoch_clause:
+            non_text_clauses.append(epoch_clause)
 
+        solo_cat = None
         if category and category.strip() and category.strip().lower() != "all":
             clean_cat = category.strip()
             if clean_cat in PRIMARY_CATEGORIES:
-                filter_clauses.append({
-                    "$or": [
-                        {"PrimaryCategory": clean_cat},
-                        {"Category": {"$regex": map_category_to_regex(clean_cat), "$options": "i"}}
-                    ]
-                })
+                non_text_clauses.append({"PrimaryCategory": clean_cat})
+                solo_cat = clean_cat
             else:
                 cat_regex = map_category_to_regex(clean_cat)
-                filter_clauses.append({"Category": {"$regex": cat_regex, "$options": "i"}})
+                non_text_clauses.append({"Category": {"$regex": cat_regex, "$options": "i"}})
 
+        solo_sent = None
         if sentiment and sentiment.strip() and sentiment.strip().lower() != "all":
             clean_sent = sentiment.strip()
             if clean_sent in PRIMARY_SENTIMENTS:
-                filter_clauses.append({
-                    "$or": [
-                        {"PrimarySentiment": clean_sent},
-                        {"Sentiment": {"$regex": map_sentiment_to_regex(clean_sent), "$options": "i"}}
-                    ]
-                })
+                non_text_clauses.append({"PrimarySentiment": clean_sent})
+                solo_sent = clean_sent
             else:
                 sent_regex = map_sentiment_to_regex(clean_sent)
-                filter_clauses.append({"Sentiment": {"$regex": sent_regex, "$options": "i"}})
+                non_text_clauses.append({"Sentiment": {"$regex": sent_regex, "$options": "i"}})
 
         if author and author.strip():
-            filter_clauses.append({"Author": {"$regex": f"^{re.escape(author.strip())}", "$options": "i"}})
+            non_text_clauses.append({"Author": {"$regex": f"^{re.escape(author.strip())}", "$options": "i"}})
 
         if artist and artist.strip():
-            art_pattern = re.escape(artist.strip())
-            filter_clauses.append({
-                "$or": [
-                    {"ArtistsList": {"$regex": art_pattern, "$options": "i"}},
-                    {f"LLM_Artists_Percentages.{artist.strip()}": {"$exists": True}}
-                ]
-            })
+            art_clause = await resolve_artist_filter(artist)
+            if art_clause.get("_id") == "__NO_ARTIST_MATCH__":
+                return CriticismSearchResult(
+                    items=[],
+                    total=0,
+                    page=page,
+                    page_size=page_size,
+                    total_pages=1,
+                )
+            if art_clause:
+                non_text_clauses.append(art_clause)
 
         if concept and concept.strip():
-            filter_clauses.append({
-                "Found_Concepts": {"$regex": f"^{re.escape(concept.strip())}$", "$options": "i"}
-            })
+            non_text_clauses.append({"Found_Concepts": concept.strip().lower()})
 
-        if query and query.strip():
-            q_clean = query.strip()
+        has_text_query = bool(query and query.strip())
+        q_clean = query.strip() if has_text_query else ""
+
+        filter_clauses = list(non_text_clauses)
+        if has_text_query:
             filter_clauses.append({"$text": {"$search": q_clean}})
 
         mongo_filter = {"$and": filter_clauses} if filter_clauses else {}
@@ -671,47 +756,105 @@ class Query:
         else:  # date_desc default
             sort_criteria = [("DateEpoch", -1), ("_id", -1)]
 
-        has_text_query = bool(query and query.strip())
+        include_full_text = wants_full_text_fields(info)
+        doc_projection = None if include_full_text else {"Full_text": 0, "extracted_text": 0}
 
-        # Fast parallel execution: count + find
-        if not mongo_filter:
-            count_task = criticism_collection.estimated_document_count()
-        elif has_text_query:
-            # Bound text search count to 10,000 for instant response and zero memory thrashing
-            count_task = criticism_collection.count_documents(mongo_filter, limit=10000)
-        else:
-            count_task = criticism_collection.count_documents(mongo_filter)
+        async def fetch_by_ids(page_ids):
+            if not page_ids:
+                return []
+            full_docs_cursor = criticism_collection.find({"_id": {"$in": page_ids}}, doc_projection)
+            docs_by_id = {d["_id"]: d async for d in full_docs_cursor}
+            return [docs_by_id[pid] for pid in page_ids if pid in docs_by_id]
 
-        async def execute_find():
-            if has_text_query:
-                # Two-stage fetch for text search: sort only _id to prevent pulling
-                # multi-megabyte Full_text fields into MongoDB in-memory sort buffer.
-                id_docs = await (
-                    criticism_collection.find(mongo_filter, {"_id": 1})
-                    .sort(sort_criteria)
-                    .skip(skip)
-                    .limit(page_size)
-                    .to_list(length=page_size)
+        async def fast_broad_text_ids():
+            patterns = compile_text_patterns(q_clean)
+            if not patterns:
+                return None
+            non_text_filter = {"$and": non_text_clauses} if non_text_clauses else {}
+            needed = skip + page_size
+            matched_ids = []
+            scanned = 0
+            cursor = (
+                criticism_collection.find(
+                    non_text_filter,
+                    {"_id": 1, "Title": 1, "Summary": 1, "Author": 1, "Full_text": 1},
                 )
-                page_ids = [d["_id"] for d in id_docs]
-                if not page_ids:
-                    return []
-                full_docs_cursor = criticism_collection.find({"_id": {"$in": page_ids}})
-                docs_by_id = {d["_id"]: d async for d in full_docs_cursor}
-                return [docs_by_id[pid] for pid in page_ids if pid in docs_by_id]
-            else:
-                return await (
-                    criticism_collection.find(mongo_filter)
-                    .sort(sort_criteria)
-                    .skip(skip)
-                    .limit(page_size)
-                    .to_list(length=page_size)
-                )
+                .sort(sort_criteria)
+                .batch_size(100)
+            )
+            try:
+                async for doc in cursor:
+                    scanned += 1
+                    haystack = (
+                        f"{doc.get('Title') or ''}\n"
+                        f"{doc.get('Summary') or ''}\n"
+                        f"{doc.get('Author') or ''}\n"
+                        f"{doc.get('Full_text') or ''}"
+                    )
+                    if all(p.search(haystack) for p in patterns):
+                        matched_ids.append(doc["_id"])
+                        if len(matched_ids) >= needed:
+                            return matched_ids[skip:needed]
+                    if scanned >= 1500:
+                        return None
+            finally:
+                await cursor.close()
+            return matched_ids[skip:needed]
 
-        find_task = execute_find()
-
+        # Fast parallel / cached execution
         try:
-            total, raw_docs = await asyncio.gather(count_task, find_task)
+            if has_text_query:
+                total = await criticism_collection.count_documents(mongo_filter, limit=2000)
+                if total == 0:
+                    raw_docs = []
+                elif total >= 2000 and sort_mode in ("date_desc", "date_asc") and skip < 500:
+                    page_ids = await fast_broad_text_ids()
+                    if page_ids is None:
+                        id_docs = await (
+                            criticism_collection.find(mongo_filter, {"_id": 1})
+                            .sort(sort_criteria)
+                            .skip(skip)
+                            .limit(page_size)
+                            .to_list(length=page_size)
+                        )
+                        page_ids = [d["_id"] for d in id_docs]
+                    raw_docs = await fetch_by_ids(page_ids)
+                else:
+                    id_docs = await (
+                        criticism_collection.find(mongo_filter, {"_id": 1})
+                        .sort(sort_criteria)
+                        .skip(skip)
+                        .limit(page_size)
+                        .to_list(length=page_size)
+                    )
+                    raw_docs = await fetch_by_ids([d["_id"] for d in id_docs])
+            else:
+                # Use O(1) corpus_totals cache for single-category or single-sentiment queries
+                cached_total = None
+                if len(non_text_clauses) == 1:
+                    corpus_totals = await get_corpus_totals()
+                    if solo_cat and solo_cat in corpus_totals.get("categories", {}):
+                        cached_total = int(corpus_totals["categories"][solo_cat])
+                    elif solo_sent and solo_sent in corpus_totals.get("sentiments", {}):
+                        cached_total = int(corpus_totals["sentiments"][solo_sent])
+
+                find_task = (
+                    criticism_collection.find(mongo_filter, doc_projection)
+                    .sort(sort_criteria)
+                    .skip(skip)
+                    .limit(page_size)
+                    .to_list(length=page_size)
+                )
+
+                if not mongo_filter:
+                    count_task = criticism_collection.estimated_document_count()
+                    total, raw_docs = await asyncio.gather(count_task, find_task)
+                elif cached_total is not None:
+                    total = cached_total
+                    raw_docs = await find_task
+                else:
+                    count_task = criticism_collection.count_documents(mongo_filter)
+                    total, raw_docs = await asyncio.gather(count_task, find_task)
         except Exception as e:
             err_str = str(e).lower()
             if "text index required" in err_str or "indexnotfound" in err_str:
@@ -723,9 +866,9 @@ class Query:
                 asyncio.create_task(ensure_indexes())
 
                 # Rebuild filter replacing $text with title/summary regex
-                fallback_filters = [c for c in filter_clauses if "$text" not in c]
-                if query and query.strip():
-                    q_regex = re.escape(query.strip())
+                fallback_filters = list(non_text_clauses)
+                if has_text_query:
+                    q_regex = re.escape(q_clean)
                     fallback_filters.append({
                         "$or": [
                             {"Title": {"$regex": q_regex, "$options": "i"}},
@@ -733,9 +876,9 @@ class Query:
                         ]
                     })
                 mongo_filter = {"$and": fallback_filters} if fallback_filters else {}
-                count_task = criticism_collection.count_documents(mongo_filter, limit=5000)
+                count_task = criticism_collection.count_documents(mongo_filter, limit=2000)
                 find_task = (
-                    criticism_collection.find(mongo_filter)
+                    criticism_collection.find(mongo_filter, doc_projection)
                     .sort(sort_criteria)
                     .skip(skip)
                     .limit(page_size)
@@ -744,7 +887,6 @@ class Query:
                 total, raw_docs = await asyncio.gather(count_task, find_task)
             else:
                 raise e
-
 
         total_pages = max(1, math.ceil(total / page_size)) if total > 0 else 1
 

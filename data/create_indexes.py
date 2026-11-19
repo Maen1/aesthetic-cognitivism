@@ -347,6 +347,7 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
         ([("Found_Concepts", ASCENDING), ("PrimaryCategory", ASCENDING)], {}),
         ([("ArtistsList", ASCENDING), ("DateEpoch", DESCENDING)], {}),
         ([("Author", ASCENDING), ("DateEpoch", DESCENDING)], {}),
+        ([("Title", ASCENDING), ("DateEpoch", DESCENDING)], {}),
         ([("Year", ASCENDING), ("DateEpoch", DESCENDING)], {}),
         ([
             ("Title", TEXT),
@@ -360,6 +361,38 @@ def optimize_database(mongo_url=MONGO_URL, db_name=DB_NAME):
         col.create_index(keys, **kwargs)
 
     word_col.create_index([("Word", ASCENDING)], unique=True)
+
+    # 5. Build compact artists_index directory for fast partial artist search
+    print("Building artists_index directory...")
+    t_art = time.time()
+    artists_idx_col = db["artists_index"]
+    art_docs = list(col.aggregate([
+        {"$match": {"ArtistsList": {"$exists": True, "$ne": []}}},
+        {"$project": {"ArtistsList": 1}},
+        {"$unwind": "$ArtistsList"},
+        {"$group": {"_id": "$ArtistsList", "count": {"$sum": 1}}},
+    ]))
+    if art_docs:
+        artists_idx_col.delete_many({})
+        batch_art = []
+        for d in art_docs:
+            name = str(d["_id"]).strip()
+            if not name:
+                continue
+            batch_art.append({
+                "_id": name,
+                "lower": name.lower(),
+                "tokens": list(dict.fromkeys(re.findall(r"\w+", name.lower()))),
+                "count": int(d["count"]),
+            })
+            if len(batch_art) >= 25000:
+                artists_idx_col.insert_many(batch_art, ordered=False)
+                batch_art = []
+        if batch_art:
+            artists_idx_col.insert_many(batch_art, ordered=False)
+        artists_idx_col.create_index([("tokens", ASCENDING), ("count", DESCENDING)])
+        artists_idx_col.create_index([("count", DESCENDING)])
+    print(f"✅ Built artists_index ({len(art_docs):,} artists) in {time.time() - t_art:.2f}s.")
 
     print(f"✅ All indexes created successfully in {time.time() - t0:.2f}s!")
     print("\nActive indexes on 'criticism':")

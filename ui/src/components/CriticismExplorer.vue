@@ -176,7 +176,12 @@ const resetAll = () => {
 
 
 const toggleFullText = (id) => {
-  expandedTextId.value = expandedTextId.value === id ? null : id;
+  if (expandedTextId.value === id) {
+    expandedTextId.value = null;
+  } else {
+    expandedTextId.value = id;
+    store.fetchFullText(id);
+  }
 };
 
 const toggleConceptSnippet = (docId, concept, snippetList) => {
@@ -673,7 +678,8 @@ onMounted(() => {
             </button>
           </div>
           <div class="max-h-72 overflow-y-auto bg-slate-900 text-slate-100 p-4 rounded-xl text-xs font-mono whitespace-pre-wrap leading-relaxed">
-            {{ item.fullText || item.extractedText || 'No text content available.' }}
+            <span v-if="store.loadingFullTextId === item.id" class="text-sky-300 animate-pulse">Loading full transcript...</span>
+            <template v-else>{{ item.fullText || item.extractedText || 'No text content available.' }}</template>
           </div>
         </div>
 

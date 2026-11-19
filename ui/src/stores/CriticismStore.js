@@ -11,6 +11,8 @@ const getGraphQLEndpoint = () => {
   return '/api/graphql/';
 };
 
+let activeSearchController = null;
+
 export const useCriticismStore = defineStore('Criticism', {
   state: () => ({
     searchQuery: '',
@@ -35,6 +37,7 @@ export const useCriticismStore = defineStore('Criticism', {
       maxYear: 2019
     },
     isLoading: false,
+    loadingFullTextId: null,
     errorMessage: null,
     activeCriticism: null
   }),
@@ -76,6 +79,12 @@ export const useCriticismStore = defineStore('Criticism', {
     },
 
     async searchCriticisms() {
+      if (activeSearchController) {
+        activeSearchController.abort();
+      }
+      const controller = new AbortController();
+      activeSearchController = controller;
+
       this.isLoading = true;
       this.errorMessage = null;
 
@@ -115,8 +124,6 @@ export const useCriticismStore = defineStore('Criticism', {
               dateEpoch
               year
               place
-              fullText
-              extractedText
               url
               category
               sentiment
@@ -154,13 +161,12 @@ export const useCriticismStore = defineStore('Criticism', {
         pageSize: this.pageSize
       };
 
-
-
       try {
         const response = await fetch(getGraphQLEndpoint(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, variables })
+          body: JSON.stringify({ query, variables }),
+          signal: controller.signal
         });
         const result = await response.json();
         if (result.errors && result.errors.length) {
@@ -174,13 +180,55 @@ export const useCriticismStore = defineStore('Criticism', {
           this.totalPages = data.totalPages || 1;
         }
       } catch (err) {
+        if (err?.name === 'AbortError') {
+          return;
+        }
         console.error('Error searching criticisms:', err);
         this.errorMessage = err.message || 'Failed to load criticisms.';
         this.searchResults = [];
         this.totalCount = 0;
         this.totalPages = 1;
       } finally {
-        this.isLoading = false;
+        if (activeSearchController === controller) {
+          activeSearchController = null;
+          this.isLoading = false;
+        }
+      }
+    },
+
+    async fetchFullText(id) {
+      const target = this.searchResults.find((item) => item.id === id);
+      if (!target || target.fullText || target.extractedText) {
+        return;
+      }
+      this.loadingFullTextId = id;
+      const query = `
+        query GetCriticismText($id: String!) {
+          criticism(id: $id) {
+            id
+            fullText
+            extractedText
+          }
+        }
+      `;
+      try {
+        const response = await fetch(getGraphQLEndpoint(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, variables: { id } })
+        });
+        const result = await response.json();
+        const item = result.data?.criticism;
+        if (item) {
+          target.fullText = item.fullText || '';
+          target.extractedText = item.extractedText || '';
+        }
+      } catch (err) {
+        console.error('Failed to fetch full text:', err);
+      } finally {
+        if (this.loadingFullTextId === id) {
+          this.loadingFullTextId = null;
+        }
       }
     },
 
